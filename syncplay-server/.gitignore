@@ -5,7 +5,7 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-src/main/resources/application-secret.properties
+syncplay-server/src/main/resources/application.properties
 
 ### STS ###
 .apt_generated
