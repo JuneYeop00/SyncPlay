@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tv } from 'lucide-react';
 import MediaCard from '../components/MediaCard';
+import SkeletonCard from '../components/SkeletonCard';
 
 const TMDB_ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -85,15 +86,20 @@ const TvShowsPage = ({ searchTerm = '', isDarkMode }) => {
     <section className="w-full p-4 animate-in fade-in duration-1000">
       <div className="flex items-center gap-4 mb-10 px-2">
         <div className="w-1.5 h-10 bg-indigo-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
-        {/* text-white를 ${textPrimary}로 수정 완료 */}
         <h2 className={`text-3xl font-black ${textPrimary} tracking-tight uppercase`}>TV 시리즈 보관함</h2>
       </div>
       
-      {filteredShows.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+          {[...Array(10)].map((_, i) => (
+            <SkeletonCard key={i} isDarkMode={isDarkMode} />
+          ))}
+        </div>
+      ) : filteredShows.length === 0 ? (
         <div className={`p-32 text-center ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'} backdrop-blur-3xl rounded-[4rem] border-2 border-dashed flex flex-col items-center gap-6`}>
           <Tv size={64} className={`${isDarkMode ? 'text-slate-700' : 'text-slate-300'} opacity-20`} />
           <p className={`${textMuted} font-black text-lg`}>
-            {loading ? "데이터를 동기화 중입니다..." : "보관함에 저장된 TV 시리즈가 없습니다"}
+            보관함에 저장된 TV 시리즈가 없습니다
           </p>
         </div>
       ) : (

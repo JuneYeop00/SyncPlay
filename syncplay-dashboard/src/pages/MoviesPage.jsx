@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Film } from 'lucide-react';
 import MediaCard from '../components/MediaCard';
+import SkeletonCard from '../components/SkeletonCard';
 
 const TMDB_ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -39,25 +40,28 @@ const MoviesPage = ({ searchTerm = '', isDarkMode }) => {
 
       const enrichedMovies = await Promise.all(
         historyData.map(async (movie) => {
-          const tmdbResp = await fetch(
-            `${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(movie.title)}&include_adult=false&language=ko-KR&page=1`,
-            { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
-          );
-          const tmdbData = await tmdbResp.json();
-          const detail = tmdbData.results?.find(res => res.media_type === 'movie' || res.media_type === 'tv') || tmdbData.results?.[0] || {};
-          const providerStatuses = await fetchProviderAvailability(movie.title);
+          try {
+            const tmdbResp = await fetch(
+              `${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(movie.title)}&include_adult=false&language=ko-KR&page=1`,
+              { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
+            );
+            const tmdbData = await tmdbResp.json();
+            const detail = tmdbData.results?.find(res => res.media_type === 'movie' || res.media_type === 'tv') || tmdbData.results?.[0] || {};
+            const providerStatuses = await fetchProviderAvailability(movie.title);
 
-          let calculatedType = detail?.media_type;
-          if (!calculatedType) calculatedType = movie.subTitle ? 'tv' : 'movie';
+            let calculatedType = detail?.media_type || (movie.subTitle ? 'tv' : 'movie');
 
-          return {
-            ...movie,
-            posterUrl: detail.poster_path ? `https://image.tmdb.org/t/p/w500${detail.poster_path}` : null,
-            overview: detail.overview || '상세 정보가 없습니다.',
-            rating: detail.vote_average || 0,
-            mediaType: calculatedType,
-            providerStatuses
-          };
+            return {
+              ...movie,
+              posterUrl: detail.poster_path ? `https://image.tmdb.org/t/p/w500${detail.poster_path}` : null,
+              overview: detail.overview || '상세 정보가 없습니다.',
+              rating: detail.vote_average || 0,
+              mediaType: calculatedType,
+              providerStatuses
+            };
+          } catch (e) {
+            return { ...movie, mediaType: movie.subTitle ? 'tv' : 'movie' };
+          }
         })
       );
 
@@ -95,15 +99,20 @@ const MoviesPage = ({ searchTerm = '', isDarkMode }) => {
     <section className="w-full p-4 animate-in fade-in duration-1000">
       <div className="flex items-center gap-4 mb-10 px-2">
         <div className="w-1.5 h-10 bg-indigo-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
-        {/* 이 부분의 text-white를 ${textPrimary}로 확실히 고쳤습니다. */}
         <h2 className={`text-3xl font-black ${textPrimary} tracking-tight uppercase`}>영화 보관함</h2>
       </div>
       
-      {filteredMovies.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+          {[...Array(10)].map((_, i) => (
+            <SkeletonCard key={i} isDarkMode={isDarkMode} />
+          ))}
+        </div>
+      ) : filteredMovies.length === 0 ? (
         <div className={`p-32 text-center ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'} backdrop-blur-3xl rounded-[4rem] border-2 border-dashed flex flex-col items-center gap-6`}>
           <Film size={64} className={`${isDarkMode ? 'text-slate-700' : 'text-slate-300'} opacity-20`} />
           <p className={`${textMuted} font-black text-lg`}>
-            {loading ? "데이터를 동기화 중입니다..." : "보관함에 저장된 영화가 없습니다"}
+            보관함에 저장된 영화가 없습니다
           </p>
         </div>
       ) : (
