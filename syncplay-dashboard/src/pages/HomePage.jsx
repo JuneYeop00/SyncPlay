@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, TrendingUp, ChevronRight, Heart, CheckCircle2 } from 'lucide-react';
+import { Play, Search, ChevronRight, Heart, Tv, Film } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SkeletonCard from '../components/SkeletonCard';
 
@@ -11,32 +11,42 @@ const OTT_LOGOS = {
   "TVING": "/logos/tving.png",
   "Disney+": "/logos/disneyplus.svg",
   "Coupang Play": "/logos/coupangplay.png",
-  "Wavve": "/logos/wavve.png"
+  "Wavve": "/logos/wavve.png",
 };
 
 const OTT_LIST = [
-  { id: 'netflix', name: 'Netflix', color: 'bg-red-600' },
-  { id: 'tving', name: 'TVING', color: 'bg-red-500' },
-  { id: 'disneyplus', name: 'Disney+', color: 'bg-blue-700' },
-  { id: 'coupangplay', name: 'Coupang Play', color: 'bg-sky-500' },
-  { id: 'wavve', name: 'Wavve', color: 'bg-blue-500' },
+  { id: 'netflix', name: 'Netflix' },
+  { id: 'tving', name: 'TVING' },
+  { id: 'disneyplus', name: 'Disney+' },
+  { id: 'coupangplay', name: 'Coupang Play' },
+  { id: 'wavve', name: 'Wavve' },
 ];
+
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return '좋은 아침이에요';
+  if (h >= 12 && h < 18) return '좋은 오후에요';
+  if (h >= 18 && h < 22) return '좋은 저녁이에요';
+  return '좋은 밤이에요';
+};
 
 const HomePage = ({ isDarkMode }) => {
   const navigate = useNavigate();
   const [userInfo, setUserInfo] = useState({ name: '', email: '' });
   const [mySubscriptions, setMySubscriptions] = useState([]);
   const [recentHistory, setRecentHistory] = useState([]);
+  const [totalHistoryCount, setTotalHistoryCount] = useState(0);
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const cardClass = isDarkMode 
-    ? "bg-white/5 backdrop-blur-3xl border-white/10 shadow-2xl hover:bg-white/10" 
-    : "bg-white/70 backdrop-blur-xl border-slate-200 shadow-lg hover:bg-white/90";
-  
+  const glass = isDarkMode
+    ? "bg-white/[0.03] backdrop-blur-xl border border-white/[0.08]"
+    : "bg-white/55 backdrop-blur-xl border border-white/50 shadow-xl shadow-slate-200/30";
+
   const textPrimary = isDarkMode ? "text-white" : "text-slate-900";
   const textSecondary = isDarkMode ? "text-slate-400" : "text-slate-500";
-  const textMuted = isDarkMode ? "text-slate-500" : "text-slate-400";
+  const textMuted = isDarkMode ? "text-slate-600" : "text-slate-400";
+  const accent = isDarkMode ? "text-indigo-400" : "text-indigo-600";
 
   useEffect(() => {
     const savedUser = JSON.parse(localStorage.getItem('user'));
@@ -58,164 +68,355 @@ const HomePage = ({ isDarkMode }) => {
       const wishRes = await fetch(`http://localhost:8080/api/wishlist?email=${encodeURIComponent(email)}`);
       if (wishRes.ok) {
         const wishData = await wishRes.json();
-        setWishlist(wishData.slice(0, 4));
+        setWishlist(wishData); // 전체 저장 — 표시는 JSX에서 slice
       }
 
       const historyRes = await fetch('http://localhost:8080/api/history');
       if (historyRes.ok) {
         const historyData = await historyRes.json();
-        const top3History = historyData.reverse().slice(0, 3);
-        const enrichedHistory = await Promise.all(
-          top3History.map(async (item) => {
+        setTotalHistoryCount(historyData.length);
+        const enriched = await Promise.all(
+          historyData.reverse().map(async (item) => { // 전체 enrich
             try {
               const tmdbResp = await fetch(
                 `${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(item.title)}&include_adult=false&language=ko-KR&page=1`,
                 { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
               );
               const tmdbData = await tmdbResp.json();
-              const detail = tmdbData.results?.find(res => res.media_type === 'movie' || res.media_type === 'tv') || tmdbData.results?.[0] || {};
+              const detail = tmdbData.results?.find(r => r.media_type === 'movie' || r.media_type === 'tv') || tmdbData.results?.[0] || {};
               return {
                 ...item,
                 posterUrl: detail.poster_path ? `https://image.tmdb.org/t/p/w500${detail.poster_path}` : null,
                 mediaType: detail.media_type || (item.subTitle ? 'tv' : 'movie')
               };
-            } catch (e) { return item; }
+            } catch { return item; }
           })
         );
-        setRecentHistory(enrichedHistory);
+        setRecentHistory(enriched); // 전체 저장 — 표시는 JSX에서 slice
       }
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
   const activeServices = OTT_LIST.filter(ott => mySubscriptions.includes(ott.id));
 
+  const stats = [
+    { label: '구독 서비스', value: loading ? '-' : `${activeServices.length}개`, Icon: Tv },
+    { label: '찜 목록', value: loading ? '-' : `${wishlist.length}편`, Icon: Heart },
+    { label: '시청 기록', value: loading ? '-' : `${totalHistoryCount}편`, Icon: Film },
+  ];
+
+  // 포스터 소스: 찜 목록 + 최근 기록 이미지 전부
+  const posterSources = [...wishlist, ...recentHistory].filter(i => i.posterUrl);
+
+  // 3컬럼으로 분배, 최소 4개씩 패딩해서 루프 매끄럽게
+  const padToMin = (arr, min = 4) => {
+    if (!arr.length) return [];
+    const out = [];
+    while (out.length < min) out.push(...arr);
+    return out;
+  };
+  const fallback = posterSources.length ? posterSources : [];
+  const rawCol1 = posterSources.filter((_, i) => i % 3 === 0);
+  const rawCol2 = posterSources.filter((_, i) => i % 3 === 1);
+  const rawCol3 = posterSources.filter((_, i) => i % 3 === 2);
+  const col1 = padToMin(rawCol1.length ? rawCol1 : fallback);
+  const col2 = padToMin(rawCol2.length ? rawCol2 : fallback);
+  const col3 = padToMin(rawCol3.length ? rawCol3 : fallback);
+
   return (
-    <div className="space-y-12 animate-in fade-in zoom-in-95 duration-1000">
-      <section className="relative group overflow-hidden rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.2)] transition-all duration-700 hover:shadow-indigo-500/10">
-        <div className={`absolute inset-0 ${isDarkMode ? 'bg-gradient-to-br from-indigo-900/40 via-blue-900/40 to-indigo-950/40' : 'bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700'} backdrop-blur-xl group-hover:scale-105 transition-transform duration-700`} />
-        <div className={`absolute inset-0 border ${isDarkMode ? 'border-white/10' : 'border-white/20'} rounded-[3rem]`} />
-        <div className="relative z-10 p-12 lg:p-20 text-white flex flex-col md:flex-row justify-between items-center gap-10">
-          <div className="max-w-xl">
-            <div className={`inline-block px-4 py-1.5 rounded-full ${isDarkMode ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300' : 'bg-white/20 border-white/30 text-white'} text-xs font-black uppercase tracking-widest mb-6`}>다시 만나서 반가워요</div>
-            <h2 className="text-6xl font-black mb-6 tracking-tight leading-tight">안녕하세요, <span className={`${isDarkMode ? 'bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent' : 'text-blue-100'}`}>{userInfo.name}</span>님!</h2>
-            <p className={`${isDarkMode ? 'text-slate-400' : 'text-blue-50'} text-xl font-medium leading-relaxed max-w-md`}>즐겨 찾는 콘텐츠들이 준비되어 있습니다. <br />나만의 통합 OTT 라이브러리를 탐색해 보세요.</p>
-            <button onClick={() => navigate('/search')} className={`mt-12 ${isDarkMode ? 'bg-white text-[#020617]' : 'bg-white text-indigo-600'} px-10 py-5 rounded-[2rem] font-black hover:scale-105 transition-all flex items-center space-x-3 shadow-2xl active:scale-95 group/btn`}>
-              <TrendingUp size={22} className="group-hover/btn:translate-y-[-2px] transition-transform" />
-              <span>전체 콘텐츠 통합 검색</span>
-            </button>
-          </div>
-          <div className={`hidden md:flex w-56 h-56 ${isDarkMode ? 'bg-white/5 border-white/10 shadow-2xl' : 'bg-white/20 border-white/30 shadow-xl'} backdrop-blur-3xl rounded-[2.5rem] items-center justify-center relative group-hover:rotate-6 transition-transform duration-700`}>
-            <Play size={100} className={`${isDarkMode ? 'fill-indigo-500/80 drop-shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'fill-white drop-shadow-lg'}`} />
+    <div className="animate-in fade-in duration-700 space-y-5">
+
+      {/* ── 히어로 배너 ── */}
+      <section className={`relative overflow-hidden rounded-3xl ${glass}`}>
+        <div className={`absolute inset-0 ${isDarkMode
+          ? 'bg-gradient-to-br from-indigo-500/[0.12] via-transparent to-violet-600/[0.08]'
+          : 'bg-gradient-to-br from-indigo-100/60 via-transparent to-violet-100/40'
+        } pointer-events-none`} />
+        <div className={`absolute -top-24 -right-24 w-72 h-72 rounded-full blur-[80px] pointer-events-none ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-200/30'}`} />
+        <div className={`absolute -bottom-16 -left-16 w-48 h-48 rounded-full blur-[60px] pointer-events-none ${isDarkMode ? 'bg-violet-500/8' : 'bg-violet-200/20'}`} />
+
+        <div className="relative z-10 p-8 lg:p-12">
+          <div className="flex flex-col md:flex-row items-center gap-10">
+
+            {/* 왼쪽: 텍스트 */}
+            <div className="flex-1 min-w-0">
+              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl mb-6 text-[10px] font-bold uppercase tracking-[0.15em] ${isDarkMode ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400' : 'bg-indigo-500/10 border border-indigo-400/30 text-indigo-600'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-indigo-400' : 'bg-indigo-500'} animate-pulse`} />
+                {getGreeting()}
+              </div>
+
+              <h2
+                className={`font-black tracking-tighter leading-[0.88] mb-5 ${textPrimary}`}
+                style={{ fontSize: 'clamp(2.8rem, 4.5vw, 5.5rem)' }}
+              >
+                안녕하세요,<br />
+                <span className={accent}>{userInfo.name || '...'}</span>님
+              </h2>
+
+              <p className={`${textSecondary} text-base font-medium leading-relaxed mb-9 max-w-sm`}>
+                오늘도 즐거운 시청 되세요.<br />
+                <span className={textMuted}>맞춤 콘텐츠가 기다리고 있어요.</span>
+              </p>
+
+              <button
+                onClick={() => navigate('/search')}
+                className={`inline-flex items-center gap-3 px-8 py-4 rounded-2xl font-bold text-sm transition-all active:scale-95 shadow-lg ${isDarkMode ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/25' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'}`}
+              >
+                <Search size={18} />
+                콘텐츠 검색하기
+              </button>
+
+              {/* 통계 행 */}
+              <div className={`flex flex-wrap gap-7 mt-10 pt-8 border-t ${isDarkMode ? 'border-white/[0.07]' : 'border-indigo-100/60'}`}>
+                {stats.map(({ label, value, Icon }) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-indigo-500/10 border border-indigo-500/20' : 'bg-indigo-50/80 border border-indigo-200/60'}`}>
+                      <Icon size={17} className={accent} />
+                    </div>
+                    <div>
+                      <div className={`text-2xl font-black tracking-tight leading-none ${textPrimary}`}>{value}</div>
+                      <div className={`text-[9px] font-bold uppercase tracking-widest mt-0.5 ${textMuted}`}>{label}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 오른쪽: 3컬럼 스크롤 포스터 월 */}
+            {posterSources.length > 0 ? (
+              <div
+                className="hidden lg:flex gap-3 overflow-hidden flex-shrink-0"
+                style={{
+                  width: '288px',
+                  height: '320px',
+                  maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+                }}
+              >
+                {/* 컬럼 1 — 위로 (느리게) */}
+                <div
+                  className="flex flex-col gap-3 flex-shrink-0"
+                  style={{ animation: 'posterScrollUp 24s linear infinite', willChange: 'transform' }}
+                >
+                  {[...col1, ...col1].map((item, i) => (
+                    <div key={i} className="relative w-[88px] h-[124px] rounded-2xl overflow-hidden flex-shrink-0 group"
+                      style={{ border: '1.5px solid rgba(255,255,255,0.1)', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}
+                    >
+                      <img src={item.posterUrl} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  ))}
+                </div>
+
+                {/* 컬럼 2 — 아래로 (중간 속도) */}
+                <div
+                  className="flex flex-col gap-3 flex-shrink-0"
+                  style={{ animation: 'posterScrollDown 18s linear infinite', willChange: 'transform' }}
+                >
+                  {[...col2, ...col2].map((item, i) => (
+                    <div key={i} className="relative w-[88px] h-[124px] rounded-2xl overflow-hidden flex-shrink-0 group"
+                      style={{ border: '1.5px solid rgba(255,255,255,0.1)', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}
+                    >
+                      <img src={item.posterUrl} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  ))}
+                </div>
+
+                {/* 컬럼 3 — 위로 (빠르게) */}
+                <div
+                  className="flex flex-col gap-3 flex-shrink-0"
+                  style={{ animation: 'posterScrollUp 14s linear infinite', willChange: 'transform' }}
+                >
+                  {[...col3, ...col3].map((item, i) => (
+                    <div key={i} className="relative w-[88px] h-[124px] rounded-2xl overflow-hidden flex-shrink-0 group"
+                      style={{ border: '1.5px solid rgba(255,255,255,0.1)', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}
+                    >
+                      <img src={item.posterUrl} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="hidden lg:flex w-64 h-64 flex-shrink-0 items-center justify-center">
+                <div className={`w-56 h-56 rounded-3xl ${isDarkMode ? 'bg-white/[0.04]' : 'bg-white/30'} backdrop-blur-xl border ${isDarkMode ? 'border-white/[0.08]' : 'border-white/50'} flex items-center justify-center`}>
+                  <Play size={80} className={`${isDarkMode ? 'fill-indigo-400 text-indigo-400' : 'fill-indigo-500 text-indigo-500'} drop-shadow-[0_0_40px_rgba(99,102,241,0.5)]`} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div className="lg:col-span-1 space-y-8">
-          <div className="flex justify-between items-end px-4">
+      {/* ── 벤토 그리드 ── */}
+      <div className="grid grid-cols-12 gap-5">
+
+        {/* 구독 서비스 */}
+        <div className={`col-span-12 lg:col-span-4 ${glass} rounded-3xl p-8`}>
+          <div className="flex justify-between items-start mb-7">
             <div>
-              <h3 className={`text-2xl font-black ${textPrimary}`}>내 서비스</h3>
-              <p className={`text-sm ${textMuted} font-bold mt-1`}>연동된 OTT 플랫폼</p>
+              <h3 className={`text-sm font-bold ${textPrimary} uppercase tracking-widest`}>구독 서비스</h3>
+              <p className={`text-[10px] ${textMuted} font-bold mt-1 uppercase tracking-[0.15em]`}>연결된 플랫폼</p>
             </div>
-            <button onClick={() => navigate('/mypage')} className={`text-xs font-black px-4 py-2 rounded-xl border transition-colors ${isDarkMode ? 'text-slate-300 bg-white/5 border-white/10 hover:text-white' : 'text-indigo-600 bg-indigo-50 border-indigo-100 hover:bg-indigo-100'}`}>관리하기</button>
+            <button
+              onClick={() => navigate('/mypage')}
+              className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-colors ${isDarkMode ? 'text-slate-400 border-white/[0.08] hover:text-white hover:bg-white/[0.06]' : 'text-slate-500 border-slate-200/70 hover:bg-white/70'}`}
+            >
+              관리
+            </button>
           </div>
-          <div className="grid grid-cols-2 gap-5">
-            {loading ? [...Array(4)].map((_, i) => <div key={i} className={`${cardClass} p-8 rounded-[2.5rem] border animate-pulse h-32`} />) : 
-             activeServices.length > 0 ? activeServices.map((ott) => (
-                <div key={ott.id} className={`${cardClass} p-8 rounded-[2.5rem] border transition-all group relative`}>
-                  <img src={OTT_LOGOS[ott.name]} alt={ott.name} className={`h-10 mb-6 object-contain ${isDarkMode ? 'filter brightness-110 drop-shadow-lg' : ''}`} />
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)] animate-pulse" />
-                    <span className={`text-[10px] font-black ${textMuted} uppercase tracking-widest`}>연동됨</span>
+
+          <div className="grid grid-cols-2 gap-4">
+            {loading
+              ? [...Array(4)].map((_, i) => (
+                  <div key={i} className={`${isDarkMode ? 'bg-white/[0.04]' : 'bg-white/40'} rounded-2xl animate-pulse h-28`} />
+                ))
+              : activeServices.length > 0
+              ? activeServices.map((ott) => (
+                  <div key={ott.id} className={`${isDarkMode ? 'bg-white/[0.04] border-white/[0.06] hover:bg-white/[0.08]' : 'bg-white/50 border-white/50 hover:bg-white/80'} border rounded-2xl p-5 transition-all flex flex-col justify-between`}>
+                    {OTT_LOGOS[ott.name] && (
+                      <img src={OTT_LOGOS[ott.name]} alt={ott.name} className={`h-7 mb-5 object-contain ${isDarkMode ? 'filter brightness-110' : ''}`} />
+                    )}
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
+                      <span className={`text-[9px] font-bold ${textMuted} uppercase tracking-widest`}>구독 중</span>
+                    </div>
                   </div>
+                ))
+              : (
+                <div
+                  className={`col-span-2 ${isDarkMode ? 'border-white/[0.07]' : 'border-slate-300/50'} border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer hover:border-indigo-500/40 transition-colors`}
+                  onClick={() => navigate('/mypage')}
+                >
+                  <p className={`${textMuted} font-bold text-[10px] uppercase tracking-widest mb-3`}>연결된 서비스 없음</p>
+                  <div className={`${accent} font-bold text-[10px] uppercase tracking-widest`}>지금 연결하기 +</div>
                 </div>
-              )) : (
-              <div className={`${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'} col-span-2 backdrop-blur-md border-2 border-dashed rounded-[3rem] p-12 text-center group cursor-pointer hover:border-indigo-500/50 transition-colors`} onClick={() => navigate('/mypage')}>
-                <p className={`${textMuted} font-black text-sm mb-6`}>연동된 서비스가 없습니다</p>
-                <div className="text-indigo-500 font-black text-xs">서비스 추가하기 +</div>
-              </div>
-            )}
+              )}
           </div>
         </div>
 
-        <div className="lg:col-span-2 space-y-8">
-          <div className="flex justify-between items-end px-4">
+        {/* 이어보기 */}
+        <div className={`col-span-12 lg:col-span-8 ${glass} rounded-3xl p-8`}>
+          <div className="flex justify-between items-start mb-7">
             <div>
-              <h3 className={`text-2xl font-black ${textPrimary}`}>최근 시청 중</h3>
-              <p className={`text-sm ${textMuted} font-bold mt-1`}>이어서 감상해 보세요</p>
+              <h3 className={`text-sm font-bold ${textPrimary} uppercase tracking-widest`}>이어보기</h3>
+              <p className={`text-[10px] ${textMuted} font-bold mt-1 uppercase tracking-[0.15em]`}>최근 시청 기록</p>
             </div>
-            <button onClick={() => navigate('/movies')} className={`text-xs font-black px-4 py-2 rounded-xl border transition-colors flex items-center ${isDarkMode ? 'text-slate-300 bg-white/5 border-white/10 hover:text-white' : 'text-indigo-600 bg-indigo-50 border-indigo-100 hover:bg-indigo-100'}`}>전체 보기 <ChevronRight size={14} className="ml-1" /></button>
+            <button
+              onClick={() => navigate('/movies')}
+              className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center ${isDarkMode ? 'text-slate-400 border-white/[0.08] hover:text-white hover:bg-white/[0.06]' : 'text-slate-500 border-slate-200/70 hover:bg-white/70'}`}
+            >
+              전체보기 <ChevronRight size={12} className="ml-1" />
+            </button>
           </div>
-          <div className="space-y-5">
-            {loading ? [...Array(3)].map((_, i) => (
-              <div key={i} className={`${cardClass} p-6 rounded-[2.5rem] border animate-pulse flex items-center gap-8 h-32`}>
-                <div className={`w-16 h-24 rounded-2xl ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
-                <div className="flex-1 space-y-4">
-                  <div className={`h-6 w-1/2 rounded-lg ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
-                  <div className={`h-3 w-1/4 rounded-md ${isDarkMode ? 'bg-white/5' : 'bg-slate-100'}`} />
-                </div>
-              </div>
-            )) : recentHistory.length > 0 ? recentHistory.map((watch) => (
-                <div key={watch.id} className={`${cardClass} p-6 rounded-[2.5rem] border transition-all group cursor-pointer flex items-center justify-between`} onClick={() => navigate(watch.subTitle ? '/tv' : '/movies')}>
-                  <div className="flex items-center space-x-8">
-                    <div className="relative shrink-0">
-                      <img src={watch.posterUrl || 'https://via.placeholder.com/100x150?text=No+Image'} alt={watch.title} className={`w-20 h-28 object-cover rounded-2xl shadow-2xl border ${isDarkMode ? 'border-white/10' : 'border-slate-200'} group-hover:scale-105 transition-transform duration-500`} />
-                      <div className="absolute inset-0 bg-indigo-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Play size={24} className="text-white fill-white shadow-2xl" /></div>
+
+          <div className="space-y-3">
+            {loading
+              ? [...Array(3)].map((_, i) => (
+                  <div key={i} className={`${isDarkMode ? 'bg-white/[0.04]' : 'bg-white/40'} rounded-2xl animate-pulse h-28`} />
+                ))
+              : recentHistory.length > 0
+              ? recentHistory.slice(0, 3).map((watch) => (
+                  <div
+                    key={watch.id}
+                    className={`${isDarkMode ? 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07]' : 'bg-white/40 border-white/50 hover:bg-white/70'} border rounded-2xl p-4 transition-all group cursor-pointer flex items-center justify-between`}
+                    onClick={() => navigate(watch.subTitle ? '/tv' : '/movies')}
+                  >
+                    <div className="flex items-center gap-5">
+                      <div className="relative shrink-0">
+                        <img
+                          src={watch.posterUrl || 'https://via.placeholder.com/100x150?text=No+Image'}
+                          alt={watch.title}
+                          className={`w-14 h-20 object-cover rounded-xl shadow-lg border ${isDarkMode ? 'border-white/[0.06]' : 'border-white/50'}`}
+                        />
+                        <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Play size={16} className="text-white fill-white" />
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className={`font-bold ${textPrimary} text-base line-clamp-1 mb-1 tracking-tight group-hover:${accent} transition-colors`}>
+                          {watch.title}
+                        </h4>
+                        <p className={`text-[10px] ${textMuted} font-bold uppercase tracking-widest`}>
+                          {watch.subTitle || '영화'}
+                          <span className="mx-2 opacity-20">|</span>
+                          <span className={accent}>{watch.progress}% 완료</span>
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className={`font-black ${textPrimary} text-xl line-clamp-1 mb-2 tracking-tight group-hover:text-indigo-500 transition-colors`}>{watch.title}</h4>
-                      <p className={`text-sm ${textSecondary} font-bold`}>{watch.subTitle || '영화'} <span className={`mx-3 opacity-20 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>|</span> <span className="text-indigo-500">{watch.progress}% 시청 중</span></p>
+                    <div className="hidden sm:block w-36 px-4">
+                      <div className={`w-full ${isDarkMode ? 'bg-white/[0.06]' : 'bg-slate-200/60'} h-1 rounded-full overflow-hidden`}>
+                        <div
+                          className={`${isDarkMode ? 'bg-indigo-400' : 'bg-indigo-500'} h-full rounded-full shadow-[0_0_10px_rgba(99,102,241,0.6)]`}
+                          style={{ width: `${watch.progress}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="hidden sm:block text-right w-40 px-6">
-                    <div className={`w-full ${isDarkMode ? 'bg-white/5' : 'bg-slate-100'} h-2.5 rounded-full overflow-hidden border ${isDarkMode ? 'border-white/5' : 'border-slate-200'}`}>
-                      <div className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full shadow-[0_0_15px_rgba(79,70,229,0.5)]" style={{ width: `${watch.progress}%` }}></div>
-                    </div>
-                  </div>
+                ))
+              : (
+                <div className={`py-16 text-center rounded-2xl border-2 border-dashed ${isDarkMode ? 'border-white/[0.06]' : 'border-slate-200/60'}`}>
+                  <p className={`${textMuted} font-bold text-[10px] uppercase tracking-widest`}>최근 시청 기록이 없습니다</p>
                 </div>
-              )) : (
-              <div className={`${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'} py-24 text-center backdrop-blur-md rounded-[3rem] border border-dashed`}>
-                <Play size={48} className={`${isDarkMode ? 'text-slate-700' : 'text-slate-300'} mx-auto mb-6 opacity-30`} />
-                <p className={`${textMuted} font-black text-sm uppercase tracking-widest`}>시청 활동이 없습니다</p>
-              </div>
-            )}
+              )}
           </div>
         </div>
       </div>
 
-      <section className="space-y-10">
-        <div className="flex justify-between items-end px-4">
-          <div className="flex items-center gap-5">
-            <div className={`w-14 h-14 rounded-2xl ${isDarkMode ? 'bg-pink-500/10 border-pink-500/20' : 'bg-pink-50 border-pink-100'} border flex items-center justify-center text-pink-500`}>
-              <Heart size={28} className={isDarkMode ? "fill-pink-500/20" : ""} />
+      {/* ── 찜 목록 ── */}
+      <section className={`${glass} rounded-3xl p-8`}>
+        <div className="flex justify-between items-start mb-7">
+          <div className="flex items-center gap-4">
+            <div className={`w-11 h-11 rounded-2xl ${isDarkMode ? 'bg-indigo-500/10 border border-indigo-500/20' : 'bg-indigo-50/80 border border-indigo-200/60'} flex items-center justify-center ${accent}`}>
+              <Heart size={20} />
             </div>
             <div>
-              <h3 className={`text-2xl font-black ${textPrimary} tracking-tight`}>찜한 콘텐츠</h3>
-              <p className={`text-sm ${textMuted} font-bold mt-1`}>나중에 볼 작품들</p>
+              <h3 className={`text-sm font-bold ${textPrimary} uppercase tracking-widest`}>찜 목록</h3>
+              <p className={`text-[10px] ${textMuted} font-bold mt-1 uppercase tracking-[0.15em]`}>나중에 볼 콘텐츠</p>
             </div>
           </div>
-          <button onClick={() => navigate('/mypage')} className={`text-xs font-black px-4 py-2 rounded-xl border transition-colors ${isDarkMode ? 'text-slate-300 bg-white/5 border-white/10 hover:text-white' : 'text-indigo-600 bg-indigo-50 border-indigo-100 hover:bg-indigo-100'}`}>전체 보기</button>
+          <button
+            onClick={() => navigate('/mypage')}
+            className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-colors ${isDarkMode ? 'text-slate-400 border-white/[0.08] hover:text-white hover:bg-white/[0.06]' : 'text-slate-500 border-slate-200/70 hover:bg-white/70'}`}
+          >
+            전체보기
+          </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
-          {loading ? [...Array(4)].map((_, i) => <SkeletonCard key={i} isDarkMode={isDarkMode} />) : 
-           wishlist.length > 0 ? wishlist.map((item) => (
-              <div key={item.id} className="group cursor-pointer" onClick={() => navigate(`/search?q=${encodeURIComponent(item.title)}`)}>
-                <div className={`relative aspect-[2/3] rounded-[3rem] overflow-hidden shadow-2xl transition-all duration-700 hover:-translate-y-3 ${isDarkMode ? 'shadow-black/40 hover:shadow-indigo-500/20' : 'shadow-slate-200 hover:shadow-indigo-200'}`}>
-                  <img src={item.posterUrl || 'https://via.placeholder.com/300x450?text=No+Image'} alt={item.title} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
-                  <div className={`absolute inset-0 bg-gradient-to-t ${isDarkMode ? 'from-[#020617]' : 'from-slate-900/80'} via-transparent to-transparent opacity-60`} />
-                  <div className={`absolute top-6 right-6 ${isDarkMode ? 'bg-black/40' : 'bg-white/80'} backdrop-blur-xl p-4 rounded-2xl border ${isDarkMode ? 'border-white/10' : 'border-slate-200'} shadow-2xl opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0`}><Heart size={24} fill="#f472b6" className="text-pink-500" /></div>
-                  <div className="absolute bottom-8 left-8 right-8">
-                    <h4 className="font-black text-white text-xl line-clamp-1 mb-2 group-hover:text-indigo-300 transition-colors">{item.title}</h4>
-                    <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-200'} font-black uppercase tracking-widest`}>{item.releaseDate?.split('-')[0]} <span className="mx-2 opacity-30">•</span> {item.mediaType}</p>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          {loading
+            ? [...Array(4)].map((_, i) => <SkeletonCard key={i} isDarkMode={isDarkMode} />)
+            : wishlist.length > 0
+            ? wishlist.slice(0, 4).map((item) => (
+                <div
+                  key={item.id}
+                  className="group cursor-pointer"
+                  onClick={() => navigate(`/search?q=${encodeURIComponent(item.title)}`)}
+                >
+                  <div className="relative aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 hover:-translate-y-2">
+                    <img
+                      src={item.posterUrl || 'https://via.placeholder.com/300x450?text=No+Image'}
+                      alt={item.title}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                    <div className={`absolute bottom-0 left-0 right-0 p-4 ${isDarkMode ? 'bg-black/30' : 'bg-black/20'} backdrop-blur-md`}>
+                      <h4 className="font-bold text-white text-sm line-clamp-1 mb-0.5 group-hover:text-indigo-300 transition-colors">{item.title}</h4>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                        {item.releaseDate?.split('-')[0]}
+                        <span className="mx-1.5 opacity-30">•</span>
+                        {item.mediaType === 'movie' ? '영화' : 'TV'}
+                      </p>
+                    </div>
                   </div>
                 </div>
+              ))
+            : (
+              <div className={`col-span-full py-20 text-center rounded-2xl border-2 border-dashed ${isDarkMode ? 'border-white/[0.06]' : 'border-slate-200/60'}`}>
+                <p className={`${textMuted} font-bold text-[10px] uppercase tracking-widest`}>찜한 콘텐츠가 없습니다</p>
               </div>
-            )) : (
-            <div className={`${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'} col-span-full py-28 text-center backdrop-blur-md rounded-[4rem] border border-dashed`}>
-              <Heart size={64} className={`${isDarkMode ? 'text-slate-800' : 'text-slate-300'} mx-auto mb-8 opacity-20`} />
-              <p className={`${textMuted} font-black text-sm uppercase tracking-widest`}>찜한 목록이 비어 있습니다</p>
-            </div>
-          )}
+            )}
         </div>
       </section>
     </div>

@@ -9,10 +9,9 @@
     color-scheme: dark;
   }
 
-  /* 커스텀 스크롤바 스타일링 */
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 5px;
+    height: 5px;
   }
 
   ::-webkit-scrollbar-track {
@@ -20,37 +19,34 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #cbd5e1; /* slate-300 */
-    border-radius: 5px;
-    border: 2px solid transparent;
-    background-clip: content-box;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 99px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8; /* slate-400 */
-    background-clip: content-box;
+    background: rgba(99, 102, 241, 0.5);
   }
 
-  /* 다크 모드 스크롤바 */
   .dark ::-webkit-scrollbar-thumb {
-    background: #334155; /* slate-700 */
-    background-clip: content-box;
+    background: rgba(255, 255, 255, 0.07);
   }
 
   .dark ::-webkit-scrollbar-thumb:hover {
-    background: #475569; /* slate-600 */
-    background-clip: content-box;
+    background: rgba(99, 102, 241, 0.6);
   }
 
-  /* Firefox 지원 */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 transparent;
-  }
-
-  .dark * {
-    scrollbar-color: #334155 transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   }
 }
 
-/* Tailwind v4에서는 @layer base 내부에 정의하거나 표준 CSS 사용 */
+@keyframes posterScrollUp {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes posterScrollDown {
+  0%   { transform: translateY(-50%); }
+  100% { transform: translateY(0); }
+}

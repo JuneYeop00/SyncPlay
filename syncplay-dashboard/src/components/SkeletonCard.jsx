@@ -1,21 +1,14 @@
-    import React from 'react';
+import React from 'react';
 
 const SkeletonCard = ({ isDarkMode }) => {
-  const bgBase = isDarkMode ? "bg-white/5" : "bg-slate-200";
-  const bgHighlight = isDarkMode ? "bg-white/10" : "bg-slate-300";
-
   return (
-    <div className={`flex flex-col w-full animate-pulse rounded-[2.5rem] p-3 border ${isDarkMode ? "border-white/5 bg-white/5" : "border-slate-100 bg-white shadow-sm"}`}>
-      {/* 포스터 영역 뼈대 */}
-      <div className={`w-full aspect-[2/3] rounded-[2rem] ${bgHighlight} relative overflow-hidden`}>
-        {/* 오로라 효과가 살짝 비치는 듯한 광택 애니메이션 */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+    <div className={`flex flex-col w-full animate-pulse rounded-2xl p-2 border ${isDarkMode ? 'border-white/[0.06] bg-white/[0.03]' : 'border-white/50 bg-white/40 shadow-sm'}`}>
+      <div className={`w-full aspect-[2/3] rounded-xl ${isDarkMode ? 'bg-white/[0.06]' : 'bg-slate-200/60'} relative overflow-hidden`}>
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.8s_ease-in-out_infinite]" />
       </div>
-      
-      {/* 텍스트 영역 뼈대 */}
-      <div className="mt-5 px-3 pb-2 space-y-3">
-        <div className={`h-5 w-3/4 rounded-lg ${bgHighlight}`} />
-        <div className={`h-3 w-1/2 rounded-md ${bgBase}`} />
+      <div className="mt-4 px-2 pb-2 space-y-2.5">
+        <div className={`h-4 w-3/4 rounded-lg ${isDarkMode ? 'bg-white/[0.06]' : 'bg-slate-200/70'}`} />
+        <div className={`h-3 w-1/2 rounded-md ${isDarkMode ? 'bg-white/[0.04]' : 'bg-slate-200/50'}`} />
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, ArrowLeft, CheckCircle2, AlertCircle, X, Star, Heart, Play } from 'lucide-react';
+import { Search, ArrowLeft, AlertCircle, X, Star, Heart, Play, TrendingUp, Flame } from 'lucide-react';
 import SkeletonCard from '../components/SkeletonCard';
 
 const TMDB_ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
@@ -17,6 +17,59 @@ const LOGO_MAP = {
   "wavve": "/logos/wavve.png"
 };
 
+const OTT_NAME_MAP = {
+  netflix: "Netflix",
+  tving: "TVING",
+  disneyplus: "Disney+",
+  coupangplay: "Coupang Play",
+  wavve: "Wavve",
+  watcha: "왓챠",
+  appletv: "Apple TV+",
+  laftel: "라프텔",
+};
+
+const normalize = (s) => s?.toLowerCase().replace(/\s/g, '').replace('+', 'plus') ?? '';
+
+const getLogoUrl = (providerName) => {
+  if (!providerName) return null;
+  return LOGO_MAP[normalize(providerName)] || null;
+};
+
+const buildProviderStatuses = (krProviders, userSubIds) => {
+  if (!krProviders) return [];
+  const seen = new Set();
+  const result = [];
+  const normalizedSubs = new Set(
+    userSubIds.map(id => normalize(OTT_NAME_MAP[id] || id))
+  );
+
+  for (const type of ['flatrate', 'rent', 'buy']) {
+    for (const p of krProviders[type] || []) {
+      if (seen.has(p.provider_id)) continue;
+      seen.add(p.provider_id);
+      if (p.provider_name?.toLowerCase().includes('ads')) continue;
+      result.push({
+        providerId: p.provider_id,
+        providerName: p.provider_name,
+        logoPath: p.logo_path,
+        status: normalizedSubs.has(normalize(p.provider_name)) ? 'SUBSCRIBED' : 'PURCHASE_REQUIRED',
+      });
+    }
+  }
+  return result;
+};
+
+const normalizeItem = (item, mediaType, providerStatuses = null) => ({
+  id: item.id,
+  title: item.title || item.name || '',
+  mediaType: mediaType || item.media_type || 'movie',
+  posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
+  overview: item.overview || '상세 정보가 없습니다.',
+  releaseDate: item.release_date || item.first_air_date || '',
+  rating: item.vote_average || 0,
+  providerStatuses,
+});
+
 const SearchPage = ({ isDarkMode }) => {
   const [searchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
@@ -24,74 +77,238 @@ const SearchPage = ({ isDarkMode }) => {
 
   const [searchInput, setSearchInput] = useState(query);
   const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  const [trending, setTrending] = useState([]);
+  const [popularMovies, setPopularMovies] = useState([]);
+  const [popularTv, setPopularTv] = useState([]);
+  const [discoverLoading, setDiscoverLoading] = useState(true);
+
   const [selectedItem, setSelectedItem] = useState(null);
+  const [modalProviders, setModalProviders] = useState([]);
+  const [modalProvidersLoading, setModalProvidersLoading] = useState(false);
   const [myWishlist, setMyWishlist] = useState([]);
+  const [userSubIds, setUserSubIds] = useState([]);
 
   const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
   const userEmail = currentUser?.email || '';
 
   const textPrimary = isDarkMode ? "text-white" : "text-slate-900";
-  const textSecondary = isDarkMode ? "text-slate-400" : "text-slate-500";
-  const cardClass = isDarkMode 
-    ? "bg-white/5 backdrop-blur-3xl border-white/10 shadow-2xl hover:bg-white/10" 
-    : "bg-white/70 backdrop-blur-xl border-slate-200 shadow-lg hover:bg-white/90";
+  const textSecondary = isDarkMode ? "text-slate-500" : "text-slate-500";
+  const textMuted = isDarkMode ? "text-slate-600" : "text-slate-400";
 
+  const glass = isDarkMode
+    ? "bg-white/[0.03] backdrop-blur-xl border border-white/[0.08]"
+    : "bg-white/55 backdrop-blur-xl border border-white/50 shadow-xl shadow-slate-100/30";
+
+  // 위시리스트 + 구독 정보 로드
   useEffect(() => {
     if (!userEmail) return;
-    fetch(`${API_BASE_URL}/api/wishlist?email=${encodeURIComponent(userEmail)}`)
-      .then(res => res.json())
-      .then(data => setMyWishlist(data))
-      .catch(err => console.error("찜 목록 불러오기 실패:", err));
+    Promise.all([
+      fetch(`${API_BASE_URL}/api/wishlist?email=${encodeURIComponent(userEmail)}`).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE_URL}/api/users/subscriptions?email=${encodeURIComponent(userEmail)}`).then(r => r.json()).catch(() => ({})),
+    ]).then(([wishData, subData]) => {
+      setMyWishlist(wishData);
+      setUserSubIds(subData.subscriptions || []);
+    });
   }, [userEmail]);
 
+  // 트렌딩/인기 로드 + OTT 정보 enrichment
+  useEffect(() => {
+    const fetchDiscover = async () => {
+      setDiscoverLoading(true);
+      try {
+        const headers = { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` };
+
+        const [trendRes, moviesRes, tvRes] = await Promise.all([
+          fetch(`${TMDB_BASE_URL}/trending/all/week?language=ko-KR`, { headers }),
+          fetch(`${TMDB_BASE_URL}/movie/popular?language=ko-KR&region=KR`, { headers }),
+          fetch(`${TMDB_BASE_URL}/tv/popular?language=ko-KR`, { headers }),
+        ]);
+        const [trendData, moviesData, tvData] = await Promise.all([
+          trendRes.json(), moviesRes.json(), tvRes.json()
+        ]);
+
+        const trendItems = (trendData.results || [])
+          .filter(i => i.media_type === 'movie' || i.media_type === 'tv')
+          .slice(0, 10);
+        const movieItems = (moviesData.results || []).slice(0, 10);
+        const tvItems = (tvData.results || []).slice(0, 10);
+
+        setTrending(trendItems.map(i => normalizeItem(i)));
+        setPopularMovies(movieItems.map(i => normalizeItem(i, 'movie')));
+        setPopularTv(tvItems.map(i => normalizeItem(i, 'tv')));
+        setDiscoverLoading(false);
+
+        // OTT 정보를 백그라운드에서 병렬 fetch
+        const enrichItems = async (items, mediaType, setter) => {
+          const subIds = JSON.parse(localStorage.getItem('user_subs') || '[]');
+          const enriched = await Promise.allSettled(
+            items.map(async (item) => {
+              try {
+                const res = await fetch(
+                  `${TMDB_BASE_URL}/${item.mediaType || mediaType}/${item.id}/watch/providers`,
+                  { headers }
+                );
+                const data = await res.json();
+                const krProviders = data.results?.KR || null;
+                return { ...item, providerStatuses: buildProviderStatuses(krProviders, subIds) };
+              } catch {
+                return { ...item, providerStatuses: [] };
+              }
+            })
+          );
+          setter(enriched.map(r => r.status === 'fulfilled' ? r.value : r));
+        };
+
+        // 구독 정보 로드 후 enrichment
+        let subs = [];
+        if (userEmail) {
+          try {
+            const subRes = await fetch(`${API_BASE_URL}/api/users/subscriptions?email=${encodeURIComponent(userEmail)}`);
+            const subData = await subRes.json();
+            subs = subData.subscriptions || [];
+            localStorage.setItem('user_subs', JSON.stringify(subs));
+            setUserSubIds(subs);
+          } catch {}
+        }
+
+        const enrichWithSubs = async (items, mediaType, setter) => {
+          const enriched = await Promise.allSettled(
+            items.map(async (item) => {
+              try {
+                const res = await fetch(
+                  `${TMDB_BASE_URL}/${item.mediaType || mediaType}/${item.id}/watch/providers`,
+                  { headers }
+                );
+                const data = await res.json();
+                const krProviders = data.results?.KR || null;
+                return { ...item, providerStatuses: buildProviderStatuses(krProviders, subs) };
+              } catch {
+                return { ...item, providerStatuses: [] };
+              }
+            })
+          );
+          setter(enriched.map(r => r.status === 'fulfilled' ? r.value : r));
+        };
+
+        await Promise.all([
+          enrichWithSubs(trendItems.map(i => normalizeItem(i)), null, setTrending),
+          enrichWithSubs(movieItems.map(i => normalizeItem(i, 'movie')), 'movie', setPopularMovies),
+          enrichWithSubs(tvItems.map(i => normalizeItem(i, 'tv')), 'tv', setPopularTv),
+        ]);
+
+      } catch (err) {
+        console.error('Discover fetch error:', err);
+        setDiscoverLoading(false);
+      }
+    };
+    fetchDiscover();
+  }, [userEmail]);
+
+  // 검색 (TMDB 직접 호출 + 백엔드 OTT 매칭)
   useEffect(() => {
     setSearchInput(query);
-  }, [query]);
+    if (!query) { setResults([]); return; }
 
-  useEffect(() => {
-    if (!query) {
-      setResults([]);
-      return;
-    }
+    const controller = new AbortController();
 
-    const fetchSearchResults = async () => {
-      setLoading(true);
+    const fetchSearch = async () => {
+      setSearchLoading(true);
       try {
-        const tmdbRes = await fetch(`${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(query)}&language=ko-KR&page=1`, {
-          headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` }
-        });
+        const tmdbRes = await fetch(
+          `${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(query)}&language=ko-KR&page=1&include_adult=false`,
+          { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` }, signal: controller.signal }
+        );
         const tmdbData = await tmdbRes.json();
-        
-        const enrichedResults = await Promise.all(
-          (tmdbData.results || []).filter(item => item.media_type === 'movie' || item.media_type === 'tv').map(async (item) => {
-            const title = item.title || item.name;
-            let providerStatuses = [];
-            try {
-              const provRes = await fetch(`${API_BASE_URL}/api/providers/availability?title=${encodeURIComponent(title)}&email=${encodeURIComponent(userEmail)}&region=KR`);
-              if (provRes.ok) {
-                const provData = await provRes.json();
-                providerStatuses = provData.providers || [];
-              }
-            } catch (err) { console.error(err); }
 
-            return {
-              id: item.id,
-              title: title,
-              mediaType: item.media_type,
-              posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-              overview: item.overview || '상세 정보가 없습니다.',
-              releaseDate: item.release_date || item.first_air_date,
-              rating: item.vote_average || 0,
-              providerStatuses
-            };
+        const filtered = (tmdbData.results || [])
+          .filter(i => i.media_type === 'movie' || i.media_type === 'tv');
+
+        // OTT 정보를 TMDB에서 직접 병렬 fetch
+        const subs = userSubIds.length > 0 ? userSubIds : (() => {
+          try { return JSON.parse(localStorage.getItem('user_subs') || '[]'); } catch { return []; }
+        })();
+
+        const enriched = await Promise.allSettled(
+          filtered.map(async (item) => {
+            try {
+              const res = await fetch(
+                `${TMDB_BASE_URL}/${item.media_type}/${item.id}/watch/providers`,
+                { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` }, signal: controller.signal }
+              );
+              const data = await res.json();
+              const krProviders = data.results?.KR || null;
+              return {
+                ...normalizeItem(item, item.media_type),
+                providerStatuses: buildProviderStatuses(krProviders, subs),
+              };
+            } catch {
+              return normalizeItem(item, item.media_type);
+            }
           })
         );
-        setResults(enrichedResults);
-      } catch (err) { console.error(err); } finally { setLoading(false); }
+
+        if (!controller.signal.aborted) {
+          setResults(enriched.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean));
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') console.error(err);
+      } finally {
+        if (!controller.signal.aborted) setSearchLoading(false);
+      }
     };
-    fetchSearchResults();
-  }, [query, userEmail]);
+
+    fetchSearch();
+    return () => controller.abort();
+  }, [query]);
+
+  // 모달 열기 (providers 없으면 fetch)
+  const handleSelectItem = useCallback(async (item) => {
+    setSelectedItem(item);
+    const existing = item.providerStatuses;
+    if (existing && existing.length >= 0) {
+      setModalProviders(existing);
+      return;
+    }
+    setModalProvidersLoading(true);
+    try {
+      const res = await fetch(
+        `${TMDB_BASE_URL}/${item.mediaType}/${item.id}/watch/providers`,
+        { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
+      );
+      const data = await res.json();
+      const krProviders = data.results?.KR || null;
+      const subs = userSubIds.length > 0 ? userSubIds : (() => {
+        try { return JSON.parse(localStorage.getItem('user_subs') || '[]'); } catch { return []; }
+      })();
+      setModalProviders(buildProviderStatuses(krProviders, subs));
+    } catch {
+      setModalProviders([]);
+    } finally {
+      setModalProvidersLoading(false);
+    }
+  }, [userSubIds]);
+
+  useEffect(() => {
+    if (selectedItem) {
+      const existing = selectedItem.providerStatuses;
+      setModalProviders(existing != null ? existing : []);
+      if (existing == null) {
+        setModalProvidersLoading(true);
+        fetch(
+          `${TMDB_BASE_URL}/${selectedItem.mediaType}/${selectedItem.id}/watch/providers`,
+          { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
+        ).then(r => r.json()).then(data => {
+          const subs = userSubIds.length > 0 ? userSubIds : (() => {
+            try { return JSON.parse(localStorage.getItem('user_subs') || '[]'); } catch { return []; }
+          })();
+          setModalProviders(buildProviderStatuses(data.results?.KR || null, subs));
+        }).catch(() => setModalProviders([]))
+          .finally(() => setModalProvidersLoading(false));
+      }
+    }
+  }, [selectedItem]);
 
   const toggleWishlist = async (item) => {
     if (!userEmail) return alert("로그인이 필요합니다.");
@@ -99,195 +316,308 @@ const SearchPage = ({ isDarkMode }) => {
       const res = await fetch(`${API_BASE_URL}/api/wishlist?email=${encodeURIComponent(userEmail)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item)
+        body: JSON.stringify({
+          id: item.id, title: item.title, mediaType: item.mediaType,
+          posterUrl: item.posterUrl, releaseDate: item.releaseDate,
+        })
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setMyWishlist(updated);
-      }
+      if (res.ok) setMyWishlist(await res.json());
     } catch (err) { console.error(err); }
   };
 
   const isWished = (id) => myWishlist.some(w => w.id === id);
 
   const handleSearch = (e) => {
-    if (e.key === 'Enter' && searchInput.trim() !== '') {
+    if (e.key === 'Enter' && searchInput.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchInput.trim())}`);
       setSelectedItem(null);
     }
   };
 
-  const getLogoUrl = (providerName) => {
-    const name = providerName.toLowerCase().replace(/\s/g, '').replace('+', 'plus');
-    return LOGO_MAP[name] || null;
+  const handlePlayDirectly = (item, providers) => {
+    const subscribed = providers.filter(p => p.status === 'SUBSCRIBED');
+    if (!subscribed.length) return;
+    const name = subscribed[0].providerName.toLowerCase().replace(/\s/g, '');
+    const t = encodeURIComponent(item.title);
+    let url = `https://www.google.com/search?q=${t}+보러가기`;
+    if (name.includes('netflix')) url = `https://www.netflix.com/search?q=${t}`;
+    else if (name.includes('tving')) url = `https://www.tving.com/search?keyword=${t}`;
+    else if (name.includes('wavve')) url = `https://www.wavve.com/search?searchWord=${t}`;
+    else if (name.includes('disney')) url = `https://www.disneyplus.com`;
+    else if (name.includes('coupang')) url = `https://www.coupangplay.com`;
+    window.open(url, '_blank');
   };
 
-  const handlePlayDirectly = (item) => {
-    const subscribed = item.providerStatuses.filter(p => p.status === 'SUBSCRIBED' && !p.providerName.toLowerCase().includes('ads'));
-    if (subscribed.length === 0) return;
-    const platformName = subscribed[0].providerName.toLowerCase().replace(/\s/g, '');
-    const encodedTitle = encodeURIComponent(item.title);
-    let targetUrl = `https://www.google.com/search?q=${encodedTitle}+보러가기`;
-    if (platformName.includes('netflix')) targetUrl = `https://www.netflix.com/search?q=${encodedTitle}`;
-    else if (platformName.includes('tving')) targetUrl = `https://www.tving.com/search?keyword=${encodedTitle}`;
-    else if (platformName.includes('wavve')) targetUrl = `https://www.wavve.com/search?searchWord=${encodedTitle}`;
-    else if (platformName.includes('disney')) targetUrl = `https://www.disneyplus.com`;
-    else if (platformName.includes('coupang')) targetUrl = `https://www.coupangplay.com`;
-    window.open(targetUrl, '_blank');
+  // 카드 컴포넌트
+  const ContentCard = ({ item, rank }) => {
+    const providers = item.providerStatuses;
+    const providersReady = providers != null;
+    const subscribedProviders = providersReady
+      ? providers.filter(p => p.status === 'SUBSCRIBED').slice(0, 3)
+      : [];
+    const hasSubscribed = subscribedProviders.length > 0;
+    const otherProviders = providersReady
+      ? providers.filter(p => p.status !== 'SUBSCRIBED').slice(0, hasSubscribed ? 0 : 3)
+      : [];
+    const showProviders = [...subscribedProviders, ...otherProviders].slice(0, 3);
+
+    return (
+      <div
+        onClick={() => handleSelectItem(item)}
+        className={`${glass} rounded-2xl overflow-hidden flex flex-col hover:-translate-y-2 transition-all duration-500 cursor-pointer group hover:border-white/[0.16] hover:shadow-2xl relative`}
+      >
+        {rank && (
+          <div className={`absolute top-3 left-3 z-10 w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-black ${isDarkMode ? 'bg-black/60 text-white backdrop-blur-xl border border-white/10' : 'bg-black/50 text-white backdrop-blur-xl'}`}>
+            {rank}
+          </div>
+        )}
+        <div className="w-full aspect-[2/3] bg-black relative overflow-hidden">
+          {item.posterUrl
+            ? <img src={item.posterUrl} alt={item.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            : <div className={`w-full h-full flex items-center justify-center text-[10px] ${textMuted} uppercase font-bold`}>이미지 없음</div>
+          }
+          <div className="absolute top-3 right-3">
+            <span className={`text-[9px] font-bold text-white px-2 py-1 rounded-lg border uppercase tracking-widest backdrop-blur-xl ${isDarkMode ? 'bg-black/50 border-white/10' : 'bg-black/40 border-white/20'}`}>
+              {item.mediaType === 'movie' ? '영화' : 'TV'}
+            </span>
+          </div>
+          {hasSubscribed && (
+            <div className={`absolute bottom-3 right-3 ${isDarkMode ? 'bg-indigo-500' : 'bg-indigo-600'} text-white p-2 rounded-xl shadow-lg shadow-indigo-500/30`}>
+              <Play size={14} fill="currentColor" />
+            </div>
+          )}
+        </div>
+        <div className="p-4 flex flex-col flex-1">
+          <h3 className={`font-bold ${textPrimary} leading-tight mb-1 line-clamp-1 text-sm tracking-tight`}>{item.title}</h3>
+          <div className="flex items-center justify-between mb-3">
+            <span className={`text-[10px] ${textSecondary} font-bold`}>{item.releaseDate?.substring(0, 4) || ''}</span>
+            <div className="flex items-center gap-1">
+              <Star size={10} className={isDarkMode ? 'fill-indigo-400 text-indigo-400' : 'fill-indigo-500 text-indigo-500'} />
+              <span className={`text-[10px] font-bold ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>{item.rating?.toFixed(1)}</span>
+            </div>
+          </div>
+
+          {/* OTT 정보 */}
+          <div className={`pt-3 border-t ${isDarkMode ? 'border-white/[0.06]' : 'border-slate-200/50'} min-h-[22px]`}>
+            {!providersReady ? (
+              <div className={`flex gap-1.5`}>
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className={`h-4 w-8 rounded animate-pulse ${isDarkMode ? 'bg-white/[0.06]' : 'bg-slate-200/60'}`} />
+                ))}
+              </div>
+            ) : showProviders.length === 0 ? (
+              <p className={`text-[9px] font-bold ${textMuted} uppercase tracking-widest`}>이용 불가</p>
+            ) : (
+              <div className="flex flex-wrap gap-2 items-center">
+                {showProviders.map(p => {
+                  const isSubscribed = p.status === 'SUBSCRIBED';
+                  const logo = getLogoUrl(p.providerName);
+                  return (
+                    <div key={p.providerId}>
+                      {logo ? (
+                        <div className={`${!isSubscribed ? 'opacity-20 grayscale' : ''}`} title={p.providerName}>
+                          <img src={logo} alt={p.providerName} className="h-4 w-auto object-contain" />
+                        </div>
+                      ) : (
+                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase ${isSubscribed
+                          ? isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' : 'bg-indigo-50 border-indigo-200/60 text-indigo-600'
+                          : isDarkMode ? 'bg-white/[0.04] border-white/[0.07] text-slate-600' : 'bg-slate-100/80 border-slate-200/60 text-slate-400'}`}>
+                          {p.providerName}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-4 relative animate-in fade-in duration-1000">
-      <div className="flex items-center gap-6 mb-16">
-        <button onClick={() => navigate(-1)} className={`p-6 backdrop-blur-3xl rounded-[2.2rem] shadow-2xl transition-all border shrink-0 ${isDarkMode ? 'bg-white/5 text-slate-400 hover:text-white border-white/10' : 'bg-white text-slate-600 hover:bg-slate-50 border-slate-200'}`}>
-          <ArrowLeft size={24} />
+    <div className="w-full max-w-7xl mx-auto relative animate-in fade-in duration-700">
+
+      {/* 검색 바 */}
+      <div className="flex items-center gap-4 mb-12">
+        <button
+          onClick={() => navigate(-1)}
+          className={`p-4 rounded-2xl transition-all border shrink-0 ${glass} ${isDarkMode ? 'text-slate-400 hover:text-white hover:border-white/[0.14]' : 'text-slate-500 hover:text-slate-900'}`}
+        >
+          <ArrowLeft size={20} />
         </button>
-        <div className={`flex-1 backdrop-blur-3xl rounded-[2.5rem] px-10 py-6 flex items-center border shadow-2xl focus-within:ring-4 transition-all ${isDarkMode ? 'bg-white/5 border-white/10 focus-within:border-indigo-500/50 focus-within:ring-indigo-500/10' : 'bg-white border-slate-200 focus-within:border-blue-400/50 focus-within:ring-blue-400/10'}`}>
-          <Search size={28} className="text-indigo-400 mr-6 shrink-0" />
-          <input type="text" className={`bg-transparent text-xl outline-none w-full font-black ${isDarkMode ? 'text-white placeholder:text-slate-600' : 'text-slate-900 placeholder:text-slate-400'} tracking-tight`} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} onKeyDown={handleSearch} placeholder="작품 제목이나 키워드를 입력하세요..." autoFocus />
+        <div className={`flex-1 rounded-2xl px-7 py-4 flex items-center transition-all ${glass} focus-within:border-indigo-500/40`}>
+          <Search size={22} className={`${isDarkMode ? 'text-indigo-400' : 'text-indigo-500'} mr-4 shrink-0`} />
+          <input
+            type="text"
+            className={`bg-transparent text-lg outline-none w-full font-bold ${isDarkMode ? 'text-white placeholder:text-slate-700' : 'text-slate-900 placeholder:text-slate-400'} tracking-tight`}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={handleSearch}
+            placeholder="제목, 배우, 장르를 검색하세요..."
+            autoFocus
+          />
         </div>
       </div>
 
-      {query && (
-        <div className="mb-12 px-6">
-          <h2 className={`text-3xl font-black ${textPrimary} flex items-center gap-4`}>
-            <span className="w-1.5 h-10 bg-indigo-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
-            "<span className="text-indigo-400">{query}</span>" 검색 결과
-          </h2>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-          {[...Array(6)].map((_, i) => <SkeletonCard key={i} isDarkMode={isDarkMode} />)}
-        </div>
-      ) : query && results.length === 0 ? (
-        <div className={`p-32 text-center border-2 border-dashed rounded-[4rem] font-black uppercase tracking-widest ${isDarkMode ? 'text-slate-600 bg-white/5 border-white/10' : 'text-slate-400 bg-slate-50 border-slate-200'}`}>
-          일치하는 검색 결과가 없습니다.
-        </div>
-      ) : !query ? (
-        <div className={`p-32 text-center border-2 border-dashed rounded-[4rem] font-black uppercase tracking-widest ${isDarkMode ? 'text-slate-600 bg-white/5 border-white/10' : 'text-slate-400 bg-slate-50 border-slate-200'}`}>
-          찾으시는 영화나 TV 프로그램을 검색해 보세요.
-        </div>
+      {query ? (
+        <>
+          <div className="mb-8 px-1">
+            <h2 className={`text-lg font-bold ${textPrimary} flex items-center gap-3 uppercase tracking-widest`}>
+              <span className={`w-1 h-5 ${isDarkMode ? 'bg-indigo-400' : 'bg-indigo-500'} rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]`} />
+              "<span className={isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}>{query}</span>" 검색 결과
+            </h2>
+          </div>
+          {searchLoading ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+              {[...Array(10)].map((_, i) => <SkeletonCard key={i} isDarkMode={isDarkMode} />)}
+            </div>
+          ) : results.length === 0 ? (
+            <div className={`p-32 text-center border-2 border-dashed rounded-3xl font-bold uppercase tracking-widest text-xs ${isDarkMode ? 'text-slate-700 border-white/[0.07] bg-white/[0.02]' : 'text-slate-400 border-slate-200/60 bg-white/30'}`}>
+              검색 결과가 없습니다.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+              {results.map(item => <ContentCard key={item.id} item={item} />)}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-          {results.map((item) => {
-            // 필터링 강화: 대소문자 무시하고 'ads' 포함된 것 제외
-            const allProviders = [...item.providerStatuses]
-              .filter(p => !p.providerName.toLowerCase().includes('ads'))
-              .sort((a, b) => {
-                if (a.status === 'SUBSCRIBED' && b.status !== 'SUBSCRIBED') return -1;
-                if (a.status !== 'SUBSCRIBED' && b.status === 'SUBSCRIBED') return 1;
-                return 0;
-              });
-            const isStreamableNow = allProviders.some(p => p.status === 'SUBSCRIBED');
-
-            return (
-              <div key={item.id} onClick={() => setSelectedItem(item)} className={`${cardClass} rounded-[3.5rem] border overflow-hidden flex flex-col hover:-translate-y-3 transition-all duration-700 cursor-pointer group shadow-2xl`}>
-                 <div className="w-full aspect-[2/3] bg-[#020617] relative overflow-hidden">
-                    {item.posterUrl ? <img src={item.posterUrl} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" /> : <div className="w-full h-full flex items-center justify-center text-xs text-slate-600 uppercase font-black">이미지 없음</div>}
-                    <div className="absolute top-5 left-5"><span className="text-[10px] font-black text-white bg-indigo-600/60 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 uppercase tracking-widest">{item.mediaType === 'movie' ? '영화' : 'TV 시리즈'}</span></div>
-                    {isStreamableNow && (
-                      <div className="absolute bottom-5 right-5 bg-green-500 text-white p-2.5 rounded-2xl shadow-lg animate-bounce">
-                        <Play size={24} fill="currentColor" />
-                      </div>
-                    )}
-                 </div>
-                 
-                 <div className="p-8 flex flex-col flex-1">
-                    <div className="mb-6">
-                      <h3 className={`font-black ${textPrimary} leading-tight mb-2 line-clamp-1 text-xl group-hover:text-indigo-500 transition-colors tracking-tighter`}>{item.title}</h3>
-                      <div className="flex items-center justify-between">
-                        <p className={`text-xs ${textSecondary} font-black tracking-widest uppercase`}>{item.releaseDate?.substring(0, 4) || '날짜 미상'}</p>
-                        <div className="flex items-center gap-1.5">
-                          <Star size={14} className="fill-yellow-500 text-yellow-500" />
-                          <span className={`text-xs font-black ${isDarkMode ? 'text-yellow-500' : 'text-yellow-700'}`}>{item.rating?.toFixed(1)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={`mt-auto pt-6 border-t ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
-                      {allProviders.length === 0 ? (
-                        <p className={`text-[10px] font-black ${isDarkMode ? 'text-slate-600' : 'text-slate-400'} uppercase tracking-widest`}>스트리밍 정보 없음</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-3 items-center">
-                          <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${isStreamableNow ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 'bg-orange-400 shadow-[0_0_10px_rgba(251,146,60,0.8)]'}`} />
-                          {allProviders.map(p => {
-                            const isSubscribed = p.status === 'SUBSCRIBED';
-                            const logo = getLogoUrl(p.providerName);
-                            return (
-                              <div key={p.providerId} className="flex items-center">
-                                {logo ? (
-                                  <div className={`relative group/logo ${!isSubscribed ? 'opacity-20 grayscale hover:opacity-100 hover:grayscale-0' : 'filter brightness-110'}`} title={`${p.providerName} ${isSubscribed ? '(구독 중)' : '(추가 구독 필요)'}`}>
-                                    <img src={logo} alt={p.providerName} className="h-5 w-auto object-contain transition-all" />
-                                    {isSubscribed && <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full shadow-sm" />}
-                                  </div>
-                                ) : <span className={`text-[10px] font-black px-2 py-1 rounded-lg border uppercase ${isSubscribed ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-white/5 border-white/10 text-slate-600'}`}>{p.providerName}</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                 </div>
+        <div className="space-y-14">
+          {/* 이번 주 트렌딩 */}
+          <section>
+            <div className="flex items-center gap-3 mb-6 px-1">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-orange-50 border border-orange-200/60'}`}>
+                <TrendingUp size={17} className={isDarkMode ? 'text-orange-400' : 'text-orange-500'} />
               </div>
-            );
-          })}
+              <h2 className={`text-sm font-bold ${textPrimary} uppercase tracking-widest`}>이번 주 트렌딩</h2>
+            </div>
+            {discoverLoading ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+                {[...Array(10)].map((_, i) => <SkeletonCard key={i} isDarkMode={isDarkMode} />)}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+                {trending.map((item, i) => <ContentCard key={item.id} item={item} rank={i + 1} />)}
+              </div>
+            )}
+          </section>
+
+          {/* 인기 영화 */}
+          <section>
+            <div className="flex items-center gap-3 mb-6 px-1">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-indigo-500/10 border border-indigo-500/20' : 'bg-indigo-50 border border-indigo-200/60'}`}>
+                <Flame size={17} className={isDarkMode ? 'text-indigo-400' : 'text-indigo-500'} />
+              </div>
+              <h2 className={`text-sm font-bold ${textPrimary} uppercase tracking-widest`}>인기 영화</h2>
+            </div>
+            {discoverLoading ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+                {[...Array(10)].map((_, i) => <SkeletonCard key={i} isDarkMode={isDarkMode} />)}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+                {popularMovies.map((item, i) => <ContentCard key={item.id} item={item} rank={i + 1} />)}
+              </div>
+            )}
+          </section>
+
+          {/* 인기 TV 시리즈 */}
+          <section>
+            <div className="flex items-center gap-3 mb-6 px-1">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-violet-500/10 border border-violet-500/20' : 'bg-violet-50 border border-violet-200/60'}`}>
+                <Flame size={17} className={isDarkMode ? 'text-violet-400' : 'text-violet-500'} />
+              </div>
+              <h2 className={`text-sm font-bold ${textPrimary} uppercase tracking-widest`}>인기 TV 시리즈</h2>
+            </div>
+            {discoverLoading ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+                {[...Array(10)].map((_, i) => <SkeletonCard key={i} isDarkMode={isDarkMode} />)}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+                {popularTv.map((item, i) => <ContentCard key={item.id} item={item} rank={i + 1} />)}
+              </div>
+            )}
+          </section>
         </div>
       )}
 
+      {/* 상세 모달 */}
       {selectedItem && (
-        <div onClick={() => setSelectedItem(null)} className={`fixed inset-0 z-[999] flex items-center justify-center p-6 backdrop-blur-3xl animate-in fade-in duration-500 ${isDarkMode ? 'bg-[#020617]/80' : 'bg-slate-900/40'}`}>
-          <div onClick={(e) => e.stopPropagation()} className={`rounded-[4rem] overflow-hidden max-w-5xl w-full shadow-[0_40px_100px_rgba(0,0,0,0.6)] border relative animate-in zoom-in-95 slide-in-from-bottom-12 duration-700 ${isDarkMode ? 'bg-white/5 backdrop-blur-[80px] border-white/10' : 'bg-white border-slate-200'}`}>
-            <div className="flex flex-col md:flex-row h-full">
-              <div className="md:w-[45%] bg-[#020617] relative group overflow-hidden">
-                <img src={selectedItem.posterUrl || 'https://via.placeholder.com/300x450?text=No+Image'} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" alt="poster" />
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[#020617]/20" />
+        <div
+          onClick={() => setSelectedItem(null)}
+          className={`fixed inset-0 z-[999] flex items-center justify-center p-6 backdrop-blur-2xl animate-in fade-in duration-300 ${isDarkMode ? 'bg-black/70' : 'bg-slate-900/30'}`}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`rounded-3xl overflow-hidden max-w-5xl w-full shadow-2xl border relative animate-in zoom-in-95 duration-300 ${isDarkMode ? 'bg-[#0d0d10]/90 backdrop-blur-2xl border-white/[0.1]' : 'bg-white/80 backdrop-blur-2xl border-white/60'}`}
+          >
+            <div className="flex flex-col md:flex-row">
+              <div className="md:w-[45%] bg-black relative overflow-hidden" style={{ minHeight: '400px' }}>
+                <img
+                  src={selectedItem.posterUrl || 'https://via.placeholder.com/300x450?text=No+Image'}
+                  className="w-full h-full object-cover absolute inset-0"
+                  alt="poster"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/30" />
               </div>
-              <div className="p-16 md:w-[55%] flex flex-col justify-between relative">
-                <button onClick={() => setSelectedItem(null)} className={`absolute top-8 right-10 p-4 rounded-[1.5rem] transition-all border group ${isDarkMode ? 'bg-white/5 border-white/10 text-slate-500 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-400 hover:text-slate-900'}`}><X size={24} /></button>
+              <div className="p-12 md:w-[55%] flex flex-col justify-between relative">
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className={`absolute top-6 right-8 p-3 rounded-xl transition-all border ${isDarkMode ? 'bg-white/[0.05] border-white/[0.08] text-slate-500 hover:text-white hover:bg-white/[0.1]' : 'bg-white/60 border-slate-200/60 text-slate-400 hover:text-slate-900'}`}
+                >
+                  <X size={20} />
+                </button>
                 <div>
-                  <div className="flex items-center gap-4 mb-8">
-                    <span className={`px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-[0.2em] border ${isDarkMode ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/20' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{selectedItem.mediaType === 'movie' ? '영화' : 'TV 시리즈'}</span>
-                    <div className={`flex items-center gap-2 px-4 py-1.5 rounded-xl border ${isDarkMode ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-500' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}><Star size={18} className="fill-yellow-500" /><span className="text-base font-black">{selectedItem.rating.toFixed(1)}</span></div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <span className={`px-3 py-1 rounded-xl text-[10px] font-bold uppercase tracking-widest border ${isDarkMode ? 'bg-white/[0.05] text-slate-400 border-white/[0.08]' : 'bg-indigo-50/80 text-indigo-600 border-indigo-100/80'}`}>
+                      {selectedItem.mediaType === 'movie' ? '영화' : 'TV 시리즈'}
+                    </span>
+                    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border ${isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' : 'bg-indigo-50/80 border-indigo-200/60 text-indigo-700'}`}>
+                      <Star size={13} className={isDarkMode ? 'fill-indigo-400 text-indigo-400' : 'fill-indigo-500 text-indigo-500'} />
+                      <span className="text-sm font-bold">{selectedItem.rating?.toFixed(1)}</span>
+                    </div>
                   </div>
-                  <h2 className={`text-5xl font-black ${textPrimary} mb-8 tracking-tighter leading-tight drop-shadow-2xl`}>{selectedItem.title}</h2>
-                  <div className={`mb-10 p-8 rounded-[2.5rem] border shadow-inner ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
-                    <h4 className={`text-[10px] font-black ${textSecondary} uppercase tracking-[0.3em] mb-4`}>줄거리 요약</h4>
-                    <p className={`leading-relaxed font-medium text-lg max-h-48 overflow-y-auto pr-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{selectedItem.overview}</p>
+                  <h2 className={`text-4xl font-black ${textPrimary} mb-6 tracking-tighter leading-tight`}>{selectedItem.title}</h2>
+                  <div className={`mb-8 p-6 rounded-2xl border ${isDarkMode ? 'bg-white/[0.03] border-white/[0.06]' : 'bg-white/50 border-slate-100/80'}`}>
+                    <h4 className={`text-[10px] font-bold ${textSecondary} uppercase tracking-[0.2em] mb-3`}>줄거리</h4>
+                    <p className={`leading-relaxed font-medium text-base max-h-40 overflow-y-auto pr-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{selectedItem.overview}</p>
                   </div>
                 </div>
-                <div className="flex gap-5 mt-4">
-                  {/* 개선된 시청하기 버튼 */}
-                  {selectedItem.providerStatuses.some(p => p.status === 'SUBSCRIBED' && !p.providerName.toLowerCase().includes('ads')) ? (
-                    <button 
-                      onClick={() => handlePlayDirectly(selectedItem)} 
-                      className={`flex-1 font-black py-6 rounded-[2.5rem] flex items-center justify-center gap-4 shadow-2xl active:scale-95 transition-all group ${
-                        isDarkMode 
-                          ? 'bg-white text-[#020617] hover:bg-indigo-50 shadow-white/5' 
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'
-                      }`}
+
+                <div className="flex gap-4 mt-4">
+                  {modalProvidersLoading ? (
+                    <div className={`flex-1 py-4 rounded-2xl flex items-center justify-center border ${isDarkMode ? 'bg-white/[0.04] border-white/[0.07]' : 'bg-slate-100/80 border-slate-200/70'}`}>
+                      <div className={`flex gap-2`}>
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className={`h-4 w-12 rounded animate-pulse ${isDarkMode ? 'bg-white/[0.08]' : 'bg-slate-200'}`} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : modalProviders.some(p => p.status === 'SUBSCRIBED') ? (
+                    <button
+                      onClick={() => handlePlayDirectly(selectedItem, modalProviders)}
+                      className={`flex-1 font-bold py-4 rounded-2xl flex items-center justify-center gap-3 shadow-xl transition-all active:scale-95 ${isDarkMode ? 'bg-indigo-500 text-white hover:bg-indigo-400 shadow-indigo-500/25' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-600/20'}`}
                     >
-                      {/* 구독 중인 첫 번째 플랫폼 로고 삽입 */}
-                      {getLogoUrl(selectedItem.providerStatuses.find(p => p.status === 'SUBSCRIBED' && !p.providerName.toLowerCase().includes('ads'))?.providerName) && (
-                        <img 
-                          src={getLogoUrl(selectedItem.providerStatuses.find(p => p.status === 'SUBSCRIBED' && !p.providerName.toLowerCase().includes('ads'))?.providerName)} 
-                          alt="OTT" 
-                          className={`h-7 w-auto object-contain ${isDarkMode ? '' : 'filter brightness-0 invert'}`}
-                        />
-                      )}
-                      <span className="text-xl">
-                        {selectedItem.providerStatuses.find(p => p.status === 'SUBSCRIBED' && !p.providerName.toLowerCase().includes('ads'))?.providerName} 바로보기
-                      </span>
+                      {(() => {
+                        const p = modalProviders.find(p => p.status === 'SUBSCRIBED');
+                        const logo = getLogoUrl(p?.providerName);
+                        return logo ? <img src={logo} alt="OTT" className="h-6 w-auto object-contain" /> : null;
+                      })()}
+                      <span className="text-lg">지금 시청</span>
                     </button>
                   ) : (
-                    <div className={`flex-1 font-black py-6 rounded-[2.5rem] flex items-center justify-center gap-4 border uppercase tracking-widest text-sm ${isDarkMode ? 'bg-white/5 text-slate-600 border-white/5' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
-                      <AlertCircle size={22} /> 구독 정보 없음
+                    <div className={`flex-1 font-bold py-4 rounded-2xl flex items-center justify-center gap-3 border uppercase tracking-widest text-[10px] ${isDarkMode ? 'bg-white/[0.04] text-slate-600 border-white/[0.07]' : 'bg-slate-100/80 text-slate-400 border-slate-200/70'}`}>
+                      <AlertCircle size={18} /> 구독 중인 서비스 없음
                     </div>
                   )}
-                  
-                  <button onClick={() => toggleWishlist(selectedItem)} className={`px-12 py-6 font-black rounded-[2.5rem] flex items-center gap-4 border transition-all active:scale-95 ${isWished(selectedItem.id) ? 'bg-pink-500 text-white border-transparent shadow-xl shadow-pink-500/20' : 'bg-white/5 text-pink-500 border-white/10 hover:bg-white/10'}`}>
-                    <Heart size={28} className={isWished(selectedItem.id) ? "fill-white" : ""} />
+                  <button
+                    onClick={() => toggleWishlist(selectedItem)}
+                    className={`px-10 py-4 font-bold rounded-2xl flex items-center gap-3 border transition-all active:scale-95 ${isWished(selectedItem.id) ? isDarkMode ? 'bg-indigo-500 text-white border-transparent shadow-lg shadow-indigo-500/30' : 'bg-indigo-600 text-white border-transparent shadow-lg shadow-indigo-600/20' : isDarkMode ? 'bg-white/[0.04] text-indigo-400 border-white/[0.07] hover:bg-white/[0.08]' : 'bg-white/60 text-indigo-500 border-white/50 hover:bg-white/80'}`}
+                  >
+                    <Heart size={22} className={isWished(selectedItem.id) ? "fill-white" : ""} />
                   </button>
                 </div>
               </div>
