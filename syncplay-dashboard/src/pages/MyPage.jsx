@@ -6,29 +6,25 @@ const TMDB_ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 const OTT_LOGOS = {
-  "Netflix":        "/logos/netflix.png",
-  "TVING":          "/logos/tving.png",
-  "Disney+":        "/logos/disneyplus.svg",
-  "Coupang Play":   "/logos/coupangplay.png",
-  "Wavve":          "/logos/wavve.png",
-  "왓챠":           null,   // 이미지 추가 예정: /logos/watcha.png
-  "Apple TV+":      null,   // 이미지 추가 예정: /logos/appletv.png
-  "시즌":           null,   // 이미지 추가 예정: /logos/seezn.png
-  "네이버 시리즈온": null,   // 이미지 추가 예정: /logos/serieson.png
-  "라프텔":         null,   // 이미지 추가 예정: /logos/laftel.png
+  "Netflix":            "/logos/netflix.png",
+  "TVING":              "/logos/tving.png",
+  "Disney+":            "/logos/disneyplus.svg",
+  "Coupang Play":       "/logos/coupangplay.png",
+  "Wavve":              "/logos/wavve.png",
+  "왓챠":               "/logos/watcha.png",
+  "Apple TV+":          "/logos/appletv.png",
+  "Amazon Prime Video": "/logos/amazonprime.png",
 };
 
 const OTT_LIST = [
-  { id: 'netflix',    name: 'Netflix' },
-  { id: 'tving',      name: 'TVING' },
-  { id: 'disneyplus', name: 'Disney+' },
-  { id: 'coupangplay',name: 'Coupang Play' },
-  { id: 'wavve',      name: 'Wavve' },
-  { id: 'watcha',     name: '왓챠' },
-  { id: 'appletv',    name: 'Apple TV+' },
-  { id: 'seezn',      name: '시즌' },
-  { id: 'serieson',   name: '네이버 시리즈온' },
-  { id: 'laftel',     name: '라프텔' },
+  { id: 'netflix',          name: 'Netflix' },
+  { id: 'tving',            name: 'TVING' },
+  { id: 'disneyplus',       name: 'Disney+' },
+  { id: 'coupangplay',      name: 'Coupang Play' },
+  { id: 'wavve',            name: 'Wavve' },
+  { id: 'watcha',           name: '왓챠' },
+  { id: 'appletv',          name: 'Apple TV+' },
+  { id: 'amazonprimevideo', name: 'Amazon Prime Video' },
 ];
 
 const MyPage = ({ isDarkMode }) => {

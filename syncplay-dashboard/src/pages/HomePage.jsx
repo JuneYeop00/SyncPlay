@@ -7,19 +7,25 @@ const TMDB_ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 const OTT_LOGOS = {
-  "Netflix": "/logos/netflix.png",
-  "TVING": "/logos/tving.png",
-  "Disney+": "/logos/disneyplus.svg",
-  "Coupang Play": "/logos/coupangplay.png",
-  "Wavve": "/logos/wavve.png",
+  "Netflix":            "/logos/netflix.png",
+  "TVING":              "/logos/tving.png",
+  "Disney+":            "/logos/disneyplus.svg",
+  "Coupang Play":       "/logos/coupangplay.png",
+  "Wavve":              "/logos/wavve.png",
+  "왓챠":               "/logos/watcha.png",
+  "Apple TV+":          "/logos/appletv.png",
+  "Amazon Prime Video": "/logos/amazonprime.png",
 };
 
 const OTT_LIST = [
-  { id: 'netflix', name: 'Netflix' },
-  { id: 'tving', name: 'TVING' },
-  { id: 'disneyplus', name: 'Disney+' },
-  { id: 'coupangplay', name: 'Coupang Play' },
-  { id: 'wavve', name: 'Wavve' },
+  { id: 'netflix',          name: 'Netflix' },
+  { id: 'tving',            name: 'TVING' },
+  { id: 'disneyplus',       name: 'Disney+' },
+  { id: 'coupangplay',      name: 'Coupang Play' },
+  { id: 'wavve',            name: 'Wavve' },
+  { id: 'watcha',           name: '왓챠' },
+  { id: 'appletv',          name: 'Apple TV+' },
+  { id: 'amazonprimevideo', name: 'Amazon Prime Video' },
 ];
 
 const getGreeting = () => {

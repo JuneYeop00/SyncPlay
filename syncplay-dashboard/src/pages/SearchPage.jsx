@@ -14,7 +14,12 @@ const LOGO_MAP = {
   "disney": "/logos/disneyplus.svg",
   "coupangplay": "/logos/coupangplay.png",
   "coupang": "/logos/coupangplay.png",
-  "wavve": "/logos/wavve.png"
+  "wavve": "/logos/wavve.png",
+  "watcha": "/logos/watcha.png",
+  "appletv": "/logos/appletv.png",
+  "appletvplus": "/logos/appletv.png",
+  "amazonprimevideo": "/logos/amazonprime.png",
+  "amazon": "/logos/amazonprime.png"
 };
 
 const OTT_NAME_MAP = {
@@ -25,7 +30,7 @@ const OTT_NAME_MAP = {
   wavve: "Wavve",
   watcha: "왓챠",
   appletv: "Apple TV+",
-  laftel: "라프텔",
+  amazonprimevideo: "Amazon Prime Video",
 };
 
 const normalize = (s) => s?.toLowerCase().replace(/\s/g, '').replace('+', 'plus') ?? '';
