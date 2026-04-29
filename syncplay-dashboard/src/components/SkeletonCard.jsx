@@ -1,4 +1,4 @@
-import React from 'react';
+    import React from 'react';
 
 const SkeletonCard = ({ isDarkMode }) => {
   const bgBase = isDarkMode ? "bg-white/5" : "bg-slate-200";

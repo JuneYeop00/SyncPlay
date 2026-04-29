@@ -180,7 +180,7 @@ const MyPage = ({ isDarkMode }) => {
                 <span className={`text-xl font-black ${textPrimary} tracking-tight`}>찜한 콘텐츠 ({wishlist.length})</span>
               </div>
               {wishlist.length > 0 ? (
-                  <div className="space-y-5 max-h-[450px] overflow-y-auto pr-4 scrollbar-hide">
+                  <div className="space-y-5 max-h-[450px] overflow-y-auto pr-4">
                     {wishlist.map((item) => (
                         <div key={item.id} className={`flex items-center gap-6 group cursor-pointer p-3 rounded-[1.5rem] ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'} transition-all`} onClick={() => navigate(`/search?q=${encodeURIComponent(item.title)}`)}>
                           <img src={item.posterUrl || 'https://via.placeholder.com/100x150?text=No+Image'} className={`w-16 h-24 object-cover rounded-2xl shadow-2xl border ${isDarkMode ? 'border-white/5' : 'border-slate-200'} group-hover:scale-105 transition-transform`} alt="poster" />

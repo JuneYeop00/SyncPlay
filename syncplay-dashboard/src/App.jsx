@@ -21,6 +21,15 @@ const App = () => {
     return saved ? saved === 'dark' : true;
   });
 
+  // 테마 상태를 실제 DOM 클래스에 반영
+  React.useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
   // 테마 변경 함수
   const toggleTheme = () => {
     const newMode = !isDarkMode;
@@ -101,7 +110,7 @@ const App = () => {
 
       {/* 2. 메인 영역 컨테이너 */}
       <div className="flex-1 flex overflow-hidden h-screen relative z-10">
-        <main className="flex-1 overflow-y-auto p-8 lg:p-12 scrollbar-hide">
+        <main className="flex-1 overflow-y-auto p-8 lg:p-12">
           {!isAuthPage && (
             <div className="flex justify-between items-center mb-12">
               <h1 className={`text-4xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} tracking-tight drop-shadow-sm`}>

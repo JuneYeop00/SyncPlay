@@ -254,7 +254,7 @@ const SearchPage = ({ isDarkMode }) => {
                   <h2 className={`text-5xl font-black ${textPrimary} mb-8 tracking-tighter leading-tight drop-shadow-2xl`}>{selectedItem.title}</h2>
                   <div className={`mb-10 p-8 rounded-[2.5rem] border shadow-inner ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
                     <h4 className={`text-[10px] font-black ${textSecondary} uppercase tracking-[0.3em] mb-4`}>줄거리 요약</h4>
-                    <p className={`leading-relaxed font-medium text-lg max-h-48 overflow-y-auto pr-4 scrollbar-hide ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{selectedItem.overview}</p>
+                    <p className={`leading-relaxed font-medium text-lg max-h-48 overflow-y-auto pr-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{selectedItem.overview}</p>
                   </div>
                 </div>
                 <div className="flex gap-5 mt-4">
