@@ -6,46 +6,42 @@ const SignupPage = ({ isDarkMode }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
+    setError('');
 
     if (!name || !email || !password || !confirmPassword) {
-      alert('모든 항목을 입력해주세요.');
-      return;
+      setError('모든 항목을 입력해주세요.'); return;
     }
-
     if (password !== confirmPassword) {
-      alert('비밀번호가 서로 일치하지 않습니다.');
-      return;
+      setError('비밀번호가 서로 일치하지 않습니다.'); return;
+    }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{10,}$/.test(password)) {
+      setError('비밀번호는 대소문자, 숫자, 특수문자 포함 10자 이상이어야 합니다.'); return;
+    }
+    if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) {
+      setError('올바른 이메일 형식이 아닙니다. (예: example@email.com)'); return;
     }
 
-    const passwordRegex1 = /^(?=.*[a-z])(?=.*[A-Z]).+$/;
-    const passwordRegex2 = /\d/;
-    const passwordRegex3 = /[@$!%*?&]/;
-    const passwordRegex4 = /^.{10,}$/;
-
-    if (!passwordRegex1.test(password)) { alert('대문자와 소문자 모두 포함되어야 합니다.'); return; }
-    if (!passwordRegex2.test(password)) { alert('숫자가 포함되어야 합니다.'); return; }
-    if (!passwordRegex3.test(password)) { alert('특수문자가 포함되어야 합니다.'); return; }
-    if (!passwordRegex4.test(password)) { alert('전체 길이가 10자 이상이어야 합니다.'); return; }
-
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(email)) {
-      alert('올바른 이메일 형식이 아닙니다. (예: example@email.com)');
-      return;
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8080/api/users/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data || '회원가입에 실패했습니다.'); return; }
+      navigate('/login');
+    } catch {
+      setError('서버에 연결할 수 없습니다.');
+    } finally {
+      setLoading(false);
     }
-
-    const existingUsers = JSON.parse(localStorage.getItem('users')) || [];
-    if (existingUsers.some(u => u.email === email)) {
-      alert('이미 등록된 이메일입니다.');
-      return;
-    }
-
-    localStorage.setItem('users', JSON.stringify([...existingUsers, { name, email, password }]));
-    alert('회원가입이 완료되었습니다! 로그인 페이지로 이동합니다.');
-    navigate('/');
   };
 
   const bg = isDarkMode ? 'bg-[#050507]' : 'bg-[#eef1f8]';
@@ -128,11 +124,16 @@ const SignupPage = ({ isDarkMode }) => {
             <p className={`text-[10px] font-bold ml-2 mt-1 ${labelColor}`}>* 대소문자, 숫자, 특수문자(@$!%*?&) 포함 10자 이상</p>
           </div>
 
+          {error && (
+            <p className="text-red-400 text-sm font-bold text-center">{error}</p>
+          )}
+
           <button
             type="submit"
-            className={`w-full font-black py-5 rounded-[2rem] shadow-lg hover:-translate-y-1 transition-all active:scale-95 mt-8 text-lg ${btnClass}`}
+            disabled={loading}
+            className={`w-full font-black py-5 rounded-[2rem] shadow-lg hover:-translate-y-1 transition-all active:scale-95 mt-8 text-lg disabled:opacity-50 disabled:cursor-not-allowed ${btnClass}`}
           >
-            회원가입 완료
+            {loading ? '가입 중...' : '회원가입 완료'}
           </button>
         </form>
 

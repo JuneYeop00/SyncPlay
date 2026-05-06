@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Tv } from 'lucide-react';
 import MediaCard from '../components/MediaCard';
 import SkeletonCard from '../components/SkeletonCard';
@@ -7,7 +7,7 @@ const TMDB_ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const API_BASE_URL = 'http://localhost:8080';
 
-const TvShowsPage = ({ searchTerm = '', isDarkMode }) => {
+const TvShowsPage = ({ searchTerm = '', isDarkMode, sortOrder = 'newest', onCountChange }) => {
   const [tvShows, setTvShows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,8 +30,9 @@ const TvShowsPage = ({ searchTerm = '', isDarkMode }) => {
   }, [userEmail]);
 
   const fetchHistory = useCallback(async () => {
+    if (!userEmail) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/history`);
+      const response = await fetch(`${API_BASE_URL}/api/history?email=${encodeURIComponent(userEmail)}`);
       if (!response.ok) throw new Error('서버 연결 실패');
       const historyData = await response.json();
 
@@ -72,22 +73,26 @@ const TvShowsPage = ({ searchTerm = '', isDarkMode }) => {
   const handleDelete = async (id, title) => {
     if (!window.confirm(`'${title}' 시청 기록을 삭제하시겠습니까?`)) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/history/${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}/api/history/${id}?email=${encodeURIComponent(userEmail)}`, { method: 'DELETE' });
       if (response.ok) setTvShows(tvShows.filter((s) => s.id !== id));
     } catch (error) { console.error("삭제 에러:", error); }
   };
 
-  const filteredShows = tvShows.filter((s) =>
-    s.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredShows = useMemo(() => {
+    const filtered = tvShows.filter((s) =>
+      s.title.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    if (sortOrder === 'oldest') return [...filtered].sort((a, b) => a.id - b.id);
+    if (sortOrder === 'rating') return [...filtered].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    return filtered;
+  }, [tvShows, searchTerm, sortOrder]);
+
+  useEffect(() => {
+    if (onCountChange) onCountChange(filteredShows.length);
+  }, [filteredShows.length, onCountChange]);
 
   return (
     <section className="w-full animate-in fade-in duration-700">
-      <div className="flex items-center gap-4 mb-10 px-1">
-        <div className={`w-1 h-7 ${isDarkMode ? 'bg-indigo-400' : 'bg-indigo-500'} rounded-full shadow-[0_0_12px_rgba(99,102,241,0.6)]`} />
-        <h2 className={`text-xl font-bold ${textPrimary} tracking-widest uppercase`}>TV 시리즈 보관함</h2>
-      </div>
-
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
           {[...Array(10)].map((_, i) => <SkeletonCard key={i} isDarkMode={isDarkMode} />)}

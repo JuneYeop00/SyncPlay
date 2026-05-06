@@ -397,8 +397,8 @@ const SearchPage = ({ isDarkMode }) => {
           <div className="flex items-center justify-between mb-3">
             <span className={`text-[10px] ${textSecondary} font-bold`}>{item.releaseDate?.substring(0, 4) || ''}</span>
             <div className="flex items-center gap-1">
-              <Star size={10} className={isDarkMode ? 'fill-indigo-400 text-indigo-400' : 'fill-indigo-500 text-indigo-500'} />
-              <span className={`text-[10px] font-bold ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>{item.rating?.toFixed(1)}</span>
+              <Star size={10} className="fill-amber-400 text-amber-400" />
+              <span className="text-[10px] font-bold text-amber-400">{item.rating?.toFixed(1)}</span>
             </div>
           </div>
 
@@ -580,9 +580,9 @@ const SearchPage = ({ isDarkMode }) => {
                     <span className={`px-3 py-1 rounded-xl text-[10px] font-bold uppercase tracking-widest border ${isDarkMode ? 'bg-white/[0.05] text-slate-400 border-white/[0.08]' : 'bg-indigo-50/80 text-indigo-600 border-indigo-100/80'}`}>
                       {selectedItem.mediaType === 'movie' ? '영화' : 'TV 시리즈'}
                     </span>
-                    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border ${isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' : 'bg-indigo-50/80 border-indigo-200/60 text-indigo-700'}`}>
-                      <Star size={13} className={isDarkMode ? 'fill-indigo-400 text-indigo-400' : 'fill-indigo-500 text-indigo-500'} />
-                      <span className="text-sm font-bold">{selectedItem.rating?.toFixed(1)}</span>
+                    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border ${isDarkMode ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50/80 border-amber-200/60'}`}>
+                      <Star size={13} className="fill-amber-400 text-amber-400" />
+                      <span className="text-sm font-bold text-amber-400">{selectedItem.rating?.toFixed(1)}</span>
                     </div>
                   </div>
                   <h2 className={`text-4xl font-black ${textPrimary} mb-6 tracking-tighter leading-tight`}>{selectedItem.title}</h2>
@@ -620,9 +620,9 @@ const SearchPage = ({ isDarkMode }) => {
                   )}
                   <button
                     onClick={() => toggleWishlist(selectedItem)}
-                    className={`px-10 py-4 font-bold rounded-2xl flex items-center gap-3 border transition-all active:scale-95 ${isWished(selectedItem.id) ? isDarkMode ? 'bg-indigo-500 text-white border-transparent shadow-lg shadow-indigo-500/30' : 'bg-indigo-600 text-white border-transparent shadow-lg shadow-indigo-600/20' : isDarkMode ? 'bg-white/[0.04] text-indigo-400 border-white/[0.07] hover:bg-white/[0.08]' : 'bg-white/60 text-indigo-500 border-white/50 hover:bg-white/80'}`}
+                    className={`px-10 py-4 font-bold rounded-2xl flex items-center gap-3 border transition-all active:scale-95 ${isWished(selectedItem.id) ? 'bg-rose-500 text-white border-transparent shadow-lg shadow-rose-500/30' : isDarkMode ? 'bg-white/[0.04] text-rose-400 border-rose-500/20 hover:bg-rose-500/10' : 'bg-white/60 text-rose-400 border-rose-200/60 hover:bg-rose-50/80'}`}
                   >
-                    <Heart size={22} className={isWished(selectedItem.id) ? "fill-white" : ""} />
+                    <Heart size={22} className={isWished(selectedItem.id) ? "fill-white" : "fill-none"} />
                   </button>
                 </div>
               </div>

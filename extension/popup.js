@@ -6,18 +6,71 @@ const PLATFORM_BRIDGE_FILES = {
   DisneyPlus: "disney-bridge.js",
   CoupangPlay: "coupang-bridge.js",
   Watcha: "watcha-bridge.js",
-  Wavve: "wavve-bridge.js",
+  Wavve: "wave-bridge.js",
+  TVING: "tiving-bridge.js",
 };
+
+// 시즌 정보가 늦게 로드되는 플랫폼 목록
+const PLATFORMS_WITH_RETRY = ["Netflix"];
 
 // 팝업 버튼 클릭 시 실행
 document.getElementById("extractBtn").addEventListener("click", handleExtract);
+
+// SyncPlay(localhost) 탭에서 로그인 이메일 읽기
+async function getUserEmailFromSyncPlayTab() {
+  try {
+    const tabs = await chrome.tabs.query({});
+
+    const candidateTabs = tabs.filter((tab) => {
+      if (!tab.url) return false;
+
+      try {
+        const u = new URL(tab.url);
+        const isLocal = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+        if (!isLocal) return false;
+
+        // API 응답 탭 제외
+        if (u.pathname.startsWith("/api/")) return false;
+
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+
+    for (const tab of candidateTabs) {
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => {
+            try {
+              const user = JSON.parse(localStorage.getItem("user") || "null");
+              return user?.email || "";
+            } catch (e) {
+              return "";
+            }
+          },
+        });
+
+        const email = results?.[0]?.result || "";
+        if (email) return email;
+      } catch (e) {
+        // 다음 탭 검사
+      }
+    }
+
+    return "";
+  } catch (e) {
+    console.error("사용자 이메일 읽기 실패:", e);
+    return "";
+  }
+}
 
 async function handleExtract() {
   const resultDiv = document.getElementById("result");
   resultDiv.innerHTML = "영상 정보 추출 중...";
 
   try {
-    // 현재 활성 탭 가져오기
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab?.id || !tab?.url) {
@@ -25,7 +78,6 @@ async function handleExtract() {
       return;
     }
 
-    // 현재 URL 기준으로 플랫폼 판별
     const platform = detectPlatform(tab.url);
 
     if (!platform) {
@@ -33,7 +85,6 @@ async function handleExtract() {
       return;
     }
 
-    // 플랫폼별 bridge 파일 먼저 주입
     const bridgeFile = PLATFORM_BRIDGE_FILES[platform];
     if (bridgeFile) {
       await chrome.scripting.executeScript({
@@ -42,22 +93,43 @@ async function handleExtract() {
       });
     }
 
-    // 현재 페이지에 extractVideoInfo 함수 주입 후 결과 받기
-    const injectionResults = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: extractVideoInfo,
-    });
+    const MAX_RETRY = PLATFORMS_WITH_RETRY.includes(platform) ? 15 : 1;
+    const RETRY_INTERVAL = 300;
 
-    const data = injectionResults?.[0]?.result;
+    let injectionResults;
+    let data;
 
-    // 추출 실패 시 안내 문구 출력
+    for (let i = 0; i < MAX_RETRY; i++) {
+      injectionResults = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: extractVideoInfo,
+        world: "MAIN",
+      });
+
+      data = injectionResults?.[0]?.result;
+
+      if (!data || !PLATFORMS_WITH_RETRY.includes(platform)) break;
+      if (/시즌/.test(data.subTitle || "")) break;
+      if (data.title && data.title !== "제목 인식 실패" && data.title !== "넷플릭스") break;
+
+      await new Promise((resolve) => setTimeout(resolve, RETRY_INTERVAL));
+    }
+
     if (!data) {
       resultDiv.innerText = "데이터를 가져오지 못했습니다. 새로고침 후 다시 시도해주세요.";
       return;
     }
 
-    // 서버로 보낼 payload 구성
+    const userEmail = await getUserEmailFromSyncPlayTab();
+
+    if (!userEmail) {
+      resultDiv.innerText =
+        "SyncPlay 탭에서 로그인 사용자 이메일을 찾지 못했습니다. SyncPlay를 열어 로그인한 상태로 다시 시도해주세요.";
+      return;
+    }
+
     const payload = {
+      userEmail,
       platform: data.platform,
       title: data.title,
       subTitle: data.subTitle,
@@ -68,32 +140,31 @@ async function handleExtract() {
       watchedAt: new Date().toISOString(),
     };
 
-    // 백엔드 서버로 시청 기록 전송
     const resp = await fetch(`${API_BASE_URL}/api/history`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    // 전송 성공 시 팝업에 표시
     if (resp.ok) {
       resultDiv.innerHTML = `
         <div style="color: #2563eb; font-weight: bold;">✅ 전송 성공!</div>
         <div style="font-size: 13px; margin-top: 5px;">
+          👤 사용자: ${payload.userEmail}<br>
           🎬 제목: ${payload.title}<br>
           📝 상세: ${payload.subTitle || "없음"}<br>
           📊 진도: ${payload.progress}%
         </div>
       `;
     } else {
-      resultDiv.innerText = "서버 전송 실패";
+      const errorText = await resp.text();
+      resultDiv.innerText = `서버 전송 실패: ${errorText || resp.status}`;
     }
   } catch (err) {
     resultDiv.innerText = "에러 발생: " + err.message;
   }
 }
 
-// URL 기준 플랫폼 판별
 function detectPlatform(url) {
   try {
     const host = new URL(url).hostname;
@@ -115,7 +186,6 @@ function extractVideoInfo() {
   const host = location.hostname;
   let platform = "Unknown";
 
-  // 플랫폼 판별
   if (host.includes("netflix.com")) platform = "Netflix";
   else if (host.includes("disneyplus.com")) platform = "DisneyPlus";
   else if (host.includes("coupangplay.com")) platform = "CoupangPlay";
@@ -123,14 +193,8 @@ function extractVideoInfo() {
   else if (host.includes("wavve.com")) platform = "Wavve";
   else if (host.includes("tving.com")) platform = "TVING";
 
-  // bridge 저장소
   const bridges = window.OTTPlatformBridges || {};
 
-  // ------------------------------
-  // 공통 유틸 함수들
-  // ------------------------------
-
-  // "12:34" 또는 "1:12:34" 형태 시간을 초 단위로 변환
   function parseTimeToSeconds(text) {
     if (!text) return null;
 
@@ -152,7 +216,6 @@ function extractVideoInfo() {
     return null;
   }
 
-  // shadow DOM 내부 요소 접근
   function getShadowElement(hostEl, selector) {
     try {
       if (!hostEl || !hostEl.shadowRoot) return null;
@@ -162,17 +225,14 @@ function extractVideoInfo() {
     }
   }
 
-  // 공백 정리
   function cleanText(text) {
     return String(text || "").replace(/\s+/g, " ").trim();
   }
 
-  // 메타 태그 content 읽기
   function getMetaContent(selector) {
     return cleanText(document.querySelector(selector)?.content || "");
   }
 
-  // 플랫폼 bridge 가 심어둔 메타 데이터 읽기
   function readBridgeMeta(attributeName) {
     try {
       const raw = document.documentElement?.getAttribute(attributeName);
@@ -183,7 +243,6 @@ function extractVideoInfo() {
     }
   }
 
-  // 요소가 실제로 보이는지 검사
   function isVisible(el) {
     if (!el) return false;
 
@@ -199,8 +258,6 @@ function extractVideoInfo() {
     );
   }
 
-  // 실제 재생용 video 고르기
-  // 광고용 / 숨김 / 0x0 video 대응
   function getBestVideoElement() {
     const videos = [...document.querySelectorAll("video")];
     if (!videos.length) return null;
@@ -218,18 +275,13 @@ function extractVideoInfo() {
 
       score += area;
 
-      return {
-        video,
-        score,
-        index,
-      };
+      return { video, score, index };
     });
 
     scoredVideos.sort((a, b) => b.score - a.score);
     return scoredVideos[0]?.video || videos[0] || null;
   }
 
-  // 공통 제목 분리
   function splitTitle(rawTitle) {
     let value = cleanText(rawTitle);
 
@@ -249,13 +301,9 @@ function extractVideoInfo() {
       .trim();
 
     if (!value) {
-      return {
-        title: "",
-        subTitle: "",
-      };
+      return { title: "", subTitle: "" };
     }
 
-    // ":" 기준으로 제목/상세 분리
     if (value.includes(":")) {
       const parts = value.split(":");
       return {
@@ -264,7 +312,6 @@ function extractVideoInfo() {
       };
     }
 
-    // 시즌/화수 패턴 기준 분리
     const splitRegex = /(시즌\s*\d+|파트\s*\d+|제\s*\d+\s*화|\d+화|S\d+E\d+|Episode\s*\d+)/i;
     const match = value.match(splitRegex);
 
@@ -275,13 +322,9 @@ function extractVideoInfo() {
       };
     }
 
-    return {
-      title: value,
-      subTitle: "",
-    };
+    return { title: value, subTitle: "" };
   }
 
-  // 공통 슬라이더 기반 진도 계산
   function applyCommonSliderProgress(state) {
     const sliderCandidates = [
       ...document.querySelectorAll(".scrubber-slider"),
@@ -296,13 +339,11 @@ function extractVideoInfo() {
 
       if (isNaN(now) || isNaN(max) || max <= 0) continue;
 
-      // max가 100 이하면 퍼센트 단위로 간주
       if (max <= 100) {
         state.progress = now.toFixed(2);
         return;
       }
 
-      // max가 100보다 크면 초 단위로 간주
       state.extractedCurrentTime = Math.floor(now);
       state.extractedDuration = Math.floor(max);
       state.progress = ((now / max) * 100).toFixed(2);
@@ -320,7 +361,6 @@ function extractVideoInfo() {
     extractedDuration: video && Number.isFinite(video.duration) && video.duration > 0 ? Math.floor(video.duration) : null,
   };
 
-  // 공통 기본 진도 계산
   if (
     state.extractedCurrentTime !== null &&
     state.extractedDuration !== null &&
@@ -329,17 +369,12 @@ function extractVideoInfo() {
     state.progress = ((state.extractedCurrentTime / state.extractedDuration) * 100).toFixed(2);
   }
 
-  // 공통 슬라이더 보정
   applyCommonSliderProgress(state);
 
-  // 공통 제목 기본값
   const defaultTitle = splitTitle(document.title || "");
   if (defaultTitle.title) state.mainTitle = defaultTitle.title;
   if (defaultTitle.subTitle) state.subTitle = defaultTitle.subTitle;
 
-  // ------------------------------
-  // 플랫폼별 bridge 처리
-  // ------------------------------
   if (bridges[platform] && typeof bridges[platform].extract === "function") {
     try {
       bridges[platform].extract({
@@ -359,19 +394,12 @@ function extractVideoInfo() {
     }
   }
 
-  // bridge가 없을 때 최소 fallback
   if (!state.mainTitle) {
     const fallback = splitTitle(document.title || "");
     state.mainTitle = fallback.title || "";
     if (!state.subTitle) state.subTitle = fallback.subTitle || "";
   }
 
-  // ------------------------------
-  // 공통 후처리
-  // ------------------------------
-
-  // 띄어쓰기 교정
-  // 예: "3화나초" -> "3화 나초"
   if (state.subTitle) {
     state.subTitle = state.subTitle.replace(
       /(화|시즌\s*\d+|파트\s*\d+|S\d+E\d+|Episode\s*\d+)(?=[^\s:])/gi,
@@ -380,19 +408,16 @@ function extractVideoInfo() {
     state.subTitle = state.subTitle.replace(/\s{2,}/g, " ").trim();
   }
 
-  // 제목이 끝까지 없으면 실패 문구
   if (!state.mainTitle || state.mainTitle === "") {
     state.mainTitle = "제목 인식 실패";
     state.subTitle = "영상 화면을 클릭한 뒤 다시 시도해주세요";
   }
 
-  // 숫자 보정
   if (!Number.isFinite(state.extractedCurrentTime)) state.extractedCurrentTime = null;
   if (!Number.isFinite(state.extractedDuration) || state.extractedDuration <= 0) {
     state.extractedDuration = null;
   }
 
-  // progress 재계산
   if (
     (state.progress === null || isNaN(parseFloat(state.progress))) &&
     state.extractedCurrentTime !== null &&
@@ -402,22 +427,17 @@ function extractVideoInfo() {
     state.progress = ((state.extractedCurrentTime / state.extractedDuration) * 100).toFixed(2);
   }
 
-  // 진도 100% 초과 방지
   if (state.progress !== null && !isNaN(parseFloat(state.progress))) {
     let numericProgress = parseFloat(state.progress);
-
     if (numericProgress < 0) numericProgress = 0;
     if (numericProgress > 100) numericProgress = 100;
-
     state.progress = numericProgress.toFixed(2);
   }
 
-  // progress 값이 아예 없으면 0 처리
   if (state.progress === null) {
     state.progress = "0";
   }
 
-  // 최종 반환
   return {
     platform: platform,
     title: state.mainTitle,

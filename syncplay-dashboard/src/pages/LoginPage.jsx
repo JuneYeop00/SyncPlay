@@ -6,16 +6,28 @@ const LoginPage = ({ isDarkMode }) => {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const existingUsers = JSON.parse(localStorage.getItem('users')) || [];
-    const user = existingUsers.find(u => u.email === email && u.password === password);
-    if (user) {
-      localStorage.setItem('user', JSON.stringify(user));
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8080/api/users/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data || '로그인에 실패했습니다.'); return; }
+      localStorage.setItem('user', JSON.stringify({ ...data.user, password: data.password }));
       localStorage.setItem('isLoggedIn', 'true');
       navigate('/home');
-    } else {
-      alert('이메일 또는 비밀번호가 일치하지 않습니다.');
+    } catch {
+      setError('서버에 연결할 수 없습니다.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -75,11 +87,16 @@ const LoginPage = ({ isDarkMode }) => {
             />
           </div>
 
+          {error && (
+            <p className="text-red-400 text-sm font-bold text-center">{error}</p>
+          )}
+
           <button
             type="submit"
-            className={`w-full font-black py-5 rounded-[2rem] shadow-lg hover:-translate-y-1 transition-all active:scale-95 mt-8 text-lg ${btnClass}`}
+            disabled={loading}
+            className={`w-full font-black py-5 rounded-[2rem] shadow-lg hover:-translate-y-1 transition-all active:scale-95 mt-8 text-lg disabled:opacity-50 disabled:cursor-not-allowed ${btnClass}`}
           >
-            로그인하기
+            {loading ? '로그인 중...' : '로그인하기'}
           </button>
         </form>
 

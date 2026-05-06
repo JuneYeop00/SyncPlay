@@ -1,42 +1,42 @@
 package com.syncplay.server;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
 public class UserSubscriptionService {
 
-    private final Map<String, Set<String>> subscriptionsByUser = new ConcurrentHashMap<>();
+    private final UserSubscriptionRepository userSubscriptionRepository;
+
+    public UserSubscriptionService(UserSubscriptionRepository userSubscriptionRepository) {
+        this.userSubscriptionRepository = userSubscriptionRepository;
+    }
 
     public List<String> getSubscriptions(String email) {
-        return subscriptionsByUser
-                .getOrDefault(normalizeEmail(email), Set.of())
+        return userSubscriptionRepository.findByUserEmail(normalizeEmail(email))
                 .stream()
+                .map(UserSubscription::getPlatformId)
                 .sorted(Comparator.naturalOrder())
                 .toList();
     }
 
+    @Transactional
     public void updateSubscriptions(String email, List<String> subscriptions) {
         String normalizedEmail = normalizeEmail(email);
-        Set<String> normalizedSubscriptions = subscriptions.stream()
-                .filter(value -> value != null && !value.isBlank())
-                .map(String::trim)
-                .collect(Collectors.toSet());
+        userSubscriptionRepository.deleteByUserEmail(normalizedEmail);
 
-        subscriptionsByUser.put(normalizedEmail, normalizedSubscriptions);
+        List<UserSubscription> newSubs = subscriptions.stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(s -> new UserSubscription(normalizedEmail, s.trim()))
+                .collect(Collectors.toList());
+        userSubscriptionRepository.saveAll(newSubs);
     }
 
     private String normalizeEmail(String email) {
-        if (email == null) {
-            return "";
-        }
-        return email.trim().toLowerCase();
+        return email == null ? "" : email.trim().toLowerCase();
     }
 }

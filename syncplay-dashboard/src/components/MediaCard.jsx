@@ -98,10 +98,18 @@ const MediaCard = ({ id, title, rawTitle, progress, posterUrl, overview, rating,
 
         <div className="mt-4 px-2 pb-2">
           <h3 className={`text-sm font-bold ${textPrimary} truncate tracking-tight group-hover:${accentText} transition-colors`}>{displayTitle}</h3>
-          <p className={`text-[10px] font-bold ${textSecondary} mt-1 uppercase tracking-widest flex items-center gap-2`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-indigo-400' : 'bg-indigo-500'} shadow-[0_0_8px_rgba(99,102,241,0.8)]`} />
-            {Math.round(displayProgress)}% 시청
-          </p>
+          <div className="flex items-center justify-between mt-1.5">
+            <p className={`text-[10px] font-bold ${textSecondary} uppercase tracking-widest flex items-center gap-2`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? 'bg-indigo-400' : 'bg-indigo-500'} shadow-[0_0_8px_rgba(99,102,241,0.8)]`} />
+              {Math.round(displayProgress)}% 시청
+            </p>
+            {rating > 0 && (
+              <div className="flex items-center gap-1 text-amber-400">
+                <Star size={10} className="fill-amber-400 text-amber-400" />
+                <span className="text-[10px] font-bold">{displayRating}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -134,9 +142,9 @@ const MediaCard = ({ id, title, rawTitle, progress, posterUrl, overview, rating,
                       {platStyle.iconUrl && <img src={platStyle.iconUrl} alt={platStyle.name} className={`h-3 w-auto object-contain ${isDarkMode ? 'filter brightness-110' : ''}`} />}
                       {platStyle.name}
                     </span>
-                    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border ${isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' : 'bg-indigo-50/80 border-indigo-200/60 text-indigo-700'}`}>
-                      <Star size={14} className={isDarkMode ? 'fill-indigo-400 text-indigo-400' : 'fill-indigo-500 text-indigo-500'} />
-                      <span className="text-sm font-bold">{displayRating}</span>
+                    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border ${isDarkMode ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50/80 border-amber-200/60'}`}>
+                      <Star size={14} className="fill-amber-400 text-amber-400" />
+                      <span className="text-sm font-bold text-amber-400">{displayRating}</span>
                     </div>
                   </div>
 
@@ -144,7 +152,7 @@ const MediaCard = ({ id, title, rawTitle, progress, posterUrl, overview, rating,
 
                   <div className={`mb-8 p-6 rounded-2xl border ${isDarkMode ? 'bg-white/[0.03] border-white/[0.06]' : 'bg-white/50 border-slate-100/80'}`}>
                     <h4 className={`text-[10px] font-bold ${textSecondary} uppercase tracking-[0.2em] mb-3`}>줄거리</h4>
-                    <p className={`leading-relaxed font-medium text-base max-h-40 overflow-y-auto pr-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{displayOverview}</p>
+                    <p className={`leading-relaxed font-medium text-base max-h-64 overflow-y-auto pr-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{displayOverview}</p>
                   </div>
                 </div>
 

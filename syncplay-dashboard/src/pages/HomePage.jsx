@@ -77,7 +77,7 @@ const HomePage = ({ isDarkMode }) => {
         setWishlist(wishData); // 전체 저장 — 표시는 JSX에서 slice
       }
 
-      const historyRes = await fetch('http://localhost:8080/api/history');
+      const historyRes = await fetch(`http://localhost:8080/api/history?email=${encodeURIComponent(email)}`);
       if (historyRes.ok) {
         const historyData = await historyRes.json();
         setTotalHistoryCount(historyData.length);
@@ -152,7 +152,7 @@ const HomePage = ({ isDarkMode }) => {
               </div>
 
               <h2
-                className={`font-black tracking-tighter leading-[0.88] mb-5 ${textPrimary}`}
+                className={`font-black tracking-tighter leading-[1.05] mb-5 ${textPrimary}`}
                 style={{ fontSize: 'clamp(2.8rem, 4.5vw, 5.5rem)' }}
               >
                 안녕하세요,<br />
@@ -317,13 +317,13 @@ const HomePage = ({ isDarkMode }) => {
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
             {loading
               ? [...Array(3)].map((_, i) => (
                   <div key={i} className={`${isDarkMode ? 'bg-white/[0.04]' : 'bg-white/40'} rounded-2xl animate-pulse h-28`} />
                 ))
               : recentHistory.length > 0
-              ? recentHistory.slice(0, 3).map((watch) => (
+              ? recentHistory.map((watch) => (
                   <div
                     key={watch.id}
                     className={`${isDarkMode ? 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07]' : 'bg-white/40 border-white/50 hover:bg-white/70'} border rounded-2xl p-4 transition-all group cursor-pointer flex items-center justify-between`}
