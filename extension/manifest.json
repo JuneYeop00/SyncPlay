@@ -43,6 +43,18 @@
       "js": ["tiving-bridge.js"],
       "run_at": "document_start",
       "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.primevideo.com/*", "https://www.amazon.com/*"],
+      "js": ["prime-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://tv.apple.com/*"],
+      "js": ["appletv-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ]
 }

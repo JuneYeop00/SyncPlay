@@ -8,6 +8,8 @@ const PLATFORM_BRIDGE_FILES = {
   Watcha: "watcha-bridge.js",
   Wavve: "wave-bridge.js",
   TVING: "tiving-bridge.js",
+  PrimeVideo: "prime-bridge.js",
+  AppleTV: "appletv-bridge.js",
 };
 
 // 시즌 정보가 늦게 로드되는 플랫폼 목록
@@ -175,6 +177,8 @@ function detectPlatform(url) {
     if (host.includes("watcha.com")) return "Watcha";
     if (host.includes("wavve.com")) return "Wavve";
     if (host.includes("tving.com")) return "TVING";
+    if (host.includes("primevideo.com") || host.includes("amazon.com")) return "PrimeVideo";
+    if (host.includes("tv.apple.com")) return "AppleTV";
 
     return null;
   } catch (e) {
@@ -192,6 +196,8 @@ function extractVideoInfo() {
   else if (host.includes("watcha.com")) platform = "Watcha";
   else if (host.includes("wavve.com")) platform = "Wavve";
   else if (host.includes("tving.com")) platform = "TVING";
+  else if (host.includes("primevideo.com") || host.includes("amazon.com")) platform = "PrimeVideo";
+  else if (host.includes("tv.apple.com")) platform = "AppleTV";
 
   const bridges = window.OTTPlatformBridges || {};
 
@@ -298,6 +304,8 @@ function extractVideoInfo() {
       .replace(/\|\s*웨이브\s*$/i, "")
       .replace(/\|\s*TVING\s*$/i, "")
       .replace(/\|\s*티빙\s*$/i, "")
+      .replace(/\|\s*Prime Video\s*$/i, "")
+      .replace(/\|\s*Apple TV\s*\+?$/i, "")
       .trim();
 
     if (!value) {
