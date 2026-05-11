@@ -35,6 +35,8 @@ const OTT_NAME_MAP = {
 
 const normalize = (s) => s?.toLowerCase().replace(/\s/g, '').replace('+', 'plus') ?? '';
 
+const providerCache = new Map();
+
 const getLogoUrl = (providerName) => {
   if (!providerName) return null;
   return LOGO_MAP[normalize(providerName)] || null;
@@ -182,12 +184,19 @@ const SearchPage = ({ isDarkMode }) => {
           const enriched = await Promise.allSettled(
             items.map(async (item) => {
               try {
-                const res = await fetch(
-                  `${TMDB_BASE_URL}/${item.mediaType || mediaType}/${item.id}/watch/providers`,
-                  { headers }
-                );
-                const data = await res.json();
-                const krProviders = data.results?.KR || null;
+                const cacheKey = `${item.mediaType || mediaType}_${item.id}`;
+                let krProviders;
+                if (providerCache.has(cacheKey)) {
+                  krProviders = providerCache.get(cacheKey);
+                } else {
+                  const res = await fetch(
+                    `${TMDB_BASE_URL}/${item.mediaType || mediaType}/${item.id}/watch/providers`,
+                    { headers }
+                  );
+                  const data = await res.json();
+                  krProviders = data.results?.KR || null;
+                  providerCache.set(cacheKey, krProviders);
+                }
                 return { ...item, providerStatuses: buildProviderStatuses(krProviders, subs) };
               } catch {
                 return { ...item, providerStatuses: [] };
@@ -278,12 +287,19 @@ const SearchPage = ({ isDarkMode }) => {
     }
     setModalProvidersLoading(true);
     try {
-      const res = await fetch(
-        `${TMDB_BASE_URL}/${item.mediaType}/${item.id}/watch/providers`,
-        { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
-      );
-      const data = await res.json();
-      const krProviders = data.results?.KR || null;
+      const cacheKey = `${item.mediaType}_${item.id}`;
+      let krProviders;
+      if (providerCache.has(cacheKey)) {
+        krProviders = providerCache.get(cacheKey);
+      } else {
+        const res = await fetch(
+          `${TMDB_BASE_URL}/${item.mediaType}/${item.id}/watch/providers`,
+          { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
+        );
+        const data = await res.json();
+        krProviders = data.results?.KR || null;
+        providerCache.set(cacheKey, krProviders);
+      }
       const subs = userSubIds.length > 0 ? userSubIds : (() => {
         try { return JSON.parse(localStorage.getItem('user_subs') || '[]'); } catch { return []; }
       })();
@@ -300,17 +316,28 @@ const SearchPage = ({ isDarkMode }) => {
       const existing = selectedItem.providerStatuses;
       setModalProviders(existing != null ? existing : []);
       if (existing == null) {
-        setModalProvidersLoading(true);
-        fetch(
-          `${TMDB_BASE_URL}/${selectedItem.mediaType}/${selectedItem.id}/watch/providers`,
-          { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
-        ).then(r => r.json()).then(data => {
+        const cacheKey = `${selectedItem.mediaType}_${selectedItem.id}`;
+        if (providerCache.has(cacheKey)) {
+          const krProviders = providerCache.get(cacheKey);
           const subs = userSubIds.length > 0 ? userSubIds : (() => {
             try { return JSON.parse(localStorage.getItem('user_subs') || '[]'); } catch { return []; }
           })();
-          setModalProviders(buildProviderStatuses(data.results?.KR || null, subs));
-        }).catch(() => setModalProviders([]))
-          .finally(() => setModalProvidersLoading(false));
+          setModalProviders(buildProviderStatuses(krProviders, subs));
+        } else {
+          setModalProvidersLoading(true);
+          fetch(
+            `${TMDB_BASE_URL}/${selectedItem.mediaType}/${selectedItem.id}/watch/providers`,
+            { headers: { Authorization: `Bearer ${TMDB_ACCESS_TOKEN}` } }
+          ).then(r => r.json()).then(data => {
+            const krProviders = data.results?.KR || null;
+            providerCache.set(cacheKey, krProviders);
+            const subs = userSubIds.length > 0 ? userSubIds : (() => {
+              try { return JSON.parse(localStorage.getItem('user_subs') || '[]'); } catch { return []; }
+            })();
+            setModalProviders(buildProviderStatuses(krProviders, subs));
+          }).catch(() => setModalProviders([]))
+            .finally(() => setModalProvidersLoading(false));
+        }
       }
     }
   }, [selectedItem]);
@@ -339,6 +366,18 @@ const SearchPage = ({ isDarkMode }) => {
     }
   };
 
+  useEffect(() => {
+    if (searchInput.trim() === query) return;
+    const timer = setTimeout(() => {
+      if (searchInput.trim()) {
+        navigate(`/search?q=${encodeURIComponent(searchInput.trim())}`, { replace: true });
+      } else {
+        navigate('/search', { replace: true });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput, query]);
+
   const handlePlayDirectly = (item, providers) => {
     const subscribed = providers.filter(p => p.status === 'SUBSCRIBED');
     if (!subscribed.length) return;
@@ -347,6 +386,7 @@ const SearchPage = ({ isDarkMode }) => {
     let url = `https://www.google.com/search?q=${t}+보러가기`;
     if (name.includes('netflix')) url = `https://www.netflix.com/search?q=${t}`;
     else if (name.includes('tving')) url = `https://www.tving.com/search?keyword=${t}`;
+    else if (name.includes('watcha')) url = `https://watcha.com/search?query=${t}`;
     else if (name.includes('wavve')) url = `https://www.wavve.com/search?searchWord=${t}`;
     else if (name.includes('disney')) url = `https://www.disneyplus.com`;
     else if (name.includes('coupang')) url = `https://www.coupangplay.com`;
