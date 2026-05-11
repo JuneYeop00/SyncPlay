@@ -1,16 +1,42 @@
-# React + Vite
+# SyncPlay Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+OTT SyncPlay 프로젝트의 React 프론트엔드입니다.
 
-Currently, two official plugins are available:
+## 기술 스택
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19 + Vite 8
+- Tailwind CSS 4
+- React Router DOM 7
+- Lucide React (아이콘)
 
-## React Compiler
+## 시작하기
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+## 환경 변수
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+루트에 `.env` 파일을 생성하고 아래 값을 설정하세요.
+
+```
+VITE_TMDB_ACCESS_TOKEN=your_tmdb_access_token
+```
+
+## 페이지 구성
+
+| 경로 | 페이지 | 설명 |
+|------|--------|------|
+| `/` | LoginPage | 로그인 |
+| `/signup` | SignupPage | 회원가입 |
+| `/home` | HomePage | 홈 대시보드 (최근 기록, 구독 현황, 찜 목록) |
+| `/movies` | MoviesPage | 영화 시청 기록 관리 |
+| `/tv` | TvShowsPage | TV 시리즈 시청 기록 관리 |
+| `/search` | SearchPage | TMDB 통합 검색 / 트렌딩 |
+| `/mypage` | MyPage | 마이페이지 (구독 관리, 프로필) |
+| `/settings` | Settings | 설정 (다크/라이트 모드) |
+
+## 지원 OTT 플랫폼
+
+Netflix, TVING, Disney+, Coupang Play, Wavve, 왓챠, Apple TV+, Amazon Prime Video
