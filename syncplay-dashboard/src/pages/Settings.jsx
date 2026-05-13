@@ -72,15 +72,19 @@ const Settings = ({ isDarkMode, toggleTheme }) => {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(editEmail)) { setSaveError('올바른 이메일 형식이 아닙니다.'); return; }
 
+    const currentUser = JSON.parse(localStorage.getItem('user'));
+
     if (newPassword) {
+      if (newPassword === currentUser.password) {
+        setSaveError('이미 사용중인 비밀번호로는 변경할 수 없습니다.');
+        return;
+      }
       if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{10,}/.test(newPassword)) {
         setSaveError('비밀번호는 대소문자, 숫자, 특수문자 포함 10자 이상이어야 합니다.');
         return;
       }
       if (newPassword !== confirmNewPassword) { setSaveError('새 비밀번호가 일치하지 않습니다.'); return; }
     }
-
-    const currentUser = JSON.parse(localStorage.getItem('user'));
 
     try {
       const res = await fetch('http://localhost:8080/api/users/update', {
@@ -95,7 +99,7 @@ const Settings = ({ isDarkMode, toggleTheme }) => {
       });
 
       const data = await res.json();
-      if (!res.ok) { setSaveError(data || '저장에 실패했습니다.'); return; }
+      if (!res.ok) { setSaveError(data?.message || '저장에 실패했습니다.'); return; }
 
       const updatedUser = {
         ...currentUser,

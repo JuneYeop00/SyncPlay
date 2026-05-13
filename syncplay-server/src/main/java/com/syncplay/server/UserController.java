@@ -13,9 +13,18 @@ import java.util.Optional;
 public class UserController {
 
     private final UserRepository userRepository;
+    private final WatchHistoryRepository watchHistoryRepository;
+    private final WishlistRepository wishlistRepository;
+    private final UserSubscriptionRepository userSubscriptionRepository;
 
-    public UserController(UserRepository userRepository) {
+    public UserController(UserRepository userRepository,
+                          WatchHistoryRepository watchHistoryRepository,
+                          WishlistRepository wishlistRepository,
+                          UserSubscriptionRepository userSubscriptionRepository) {
         this.userRepository = userRepository;
+        this.watchHistoryRepository = watchHistoryRepository;
+        this.wishlistRepository = wishlistRepository;
+        this.userSubscriptionRepository = userSubscriptionRepository;
     }
 
     @PostMapping("/signup")
@@ -25,11 +34,11 @@ public class UserController {
         String password = request.getPassword() == null ? "" : request.getPassword().trim();
 
         if (name.isEmpty() || email.isEmpty() || password.isEmpty()) {
-            return ResponseEntity.badRequest().body("모든 항목을 입력해주세요.");
+            return ResponseEntity.badRequest().body(Map.of("message", "모든 항목을 입력해주세요."));
         }
 
         if (userRepository.existsByEmail(email)) {
-            return ResponseEntity.badRequest().body("이미 사용 중인 이메일입니다.");
+            return ResponseEntity.badRequest().body(Map.of("message", "이미 사용 중인 이메일입니다."));
         }
 
         User user = new User();
@@ -52,19 +61,19 @@ public class UserController {
         String password = request.getPassword() == null ? "" : request.getPassword().trim();
 
         if (email.isEmpty() || password.isEmpty()) {
-            return ResponseEntity.badRequest().body("이메일과 비밀번호를 입력해주세요.");
+            return ResponseEntity.badRequest().body(Map.of("message", "이메일과 비밀번호를 입력해주세요."));
         }
 
         Optional<User> optionalUser = userRepository.findByEmail(email);
 
         if (optionalUser.isEmpty()) {
-            return ResponseEntity.badRequest().body("이메일 또는 비밀번호가 일치하지 않습니다.");
+            return ResponseEntity.badRequest().body(Map.of("message", "이메일 또는 비밀번호가 일치하지 않습니다."));
         }
 
         User user = optionalUser.get();
 
         if (!user.getPassword().equals(password)) {
-            return ResponseEntity.badRequest().body("이메일 또는 비밀번호가 일치하지 않습니다.");
+            return ResponseEntity.badRequest().body(Map.of("message", "이메일 또는 비밀번호가 일치하지 않습니다."));
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -81,19 +90,19 @@ public class UserController {
 
         Optional<User> optionalUser = userRepository.findByEmail(currentEmail);
         if (optionalUser.isEmpty()) {
-            return ResponseEntity.badRequest().body("사용자를 찾을 수 없습니다.");
+            return ResponseEntity.badRequest().body(Map.of("message", "사용자를 찾을 수 없습니다."));
         }
 
         User user = optionalUser.get();
 
         String newEmail = request.getNewEmail() == null ? currentEmail : request.getNewEmail().trim().toLowerCase();
         if (!newEmail.equals(currentEmail) && userRepository.existsByEmail(newEmail)) {
-            return ResponseEntity.badRequest().body("이미 사용 중인 이메일입니다.");
+            return ResponseEntity.badRequest().body(Map.of("message", "이미 사용 중인 이메일입니다."));
         }
 
         String name = request.getName() == null ? "" : request.getName().trim();
         if (name.isEmpty()) {
-            return ResponseEntity.badRequest().body("이름을 입력해주세요.");
+            return ResponseEntity.badRequest().body(Map.of("message", "이름을 입력해주세요."));
         }
 
         user.setName(name);
@@ -103,6 +112,12 @@ public class UserController {
         }
 
         User saved = userRepository.save(user);
+
+        if (!newEmail.equals(currentEmail)) {
+            watchHistoryRepository.updateUserEmail(currentEmail, newEmail);
+            wishlistRepository.updateUserEmail(currentEmail, newEmail);
+            userSubscriptionRepository.updateUserEmail(currentEmail, newEmail);
+        }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("message", "수정 완료");

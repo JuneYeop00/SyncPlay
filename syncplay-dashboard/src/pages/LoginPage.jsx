@@ -20,7 +20,7 @@ const LoginPage = ({ isDarkMode }) => {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data || '로그인에 실패했습니다.'); return; }
+      if (!res.ok) { setError(data?.message || '로그인에 실패했습니다.'); return; }
       localStorage.setItem('user', JSON.stringify({ ...data.user, password: data.password }));
       localStorage.setItem('isLoggedIn', 'true');
       navigate('/home');

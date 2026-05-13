@@ -35,7 +35,7 @@ const SignupPage = ({ isDarkMode }) => {
         body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data || '회원가입에 실패했습니다.'); return; }
+      if (!res.ok) { setError(data?.message || '회원가입에 실패했습니다.'); return; }
       navigate('/login');
     } catch {
       setError('서버에 연결할 수 없습니다.');
