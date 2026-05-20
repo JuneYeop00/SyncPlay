@@ -6,47 +6,41 @@ const PLATFORM_BRIDGE_FILES = {
   DisneyPlus: "disney-bridge.js",
   CoupangPlay: "coupang-bridge.js",
   Watcha: "watcha-bridge.js",
-  Wavve: "wave-bridge.js",
-  TVING: "tiving-bridge.js",
-  PrimeVideo: "prime-bridge.js",
-  AppleTV: "appletv-bridge.js",
+  Wave: "wave-bridge.js",
+  TVING: "tiving-bridge.js"
 };
-
-// 시즌 정보가 늦게 로드되는 플랫폼 목록
-const PLATFORMS_WITH_RETRY = ["Netflix"];
 
 // 팝업 버튼 클릭 시 실행
 document.getElementById("extractBtn").addEventListener("click", handleExtract);
 
-// SyncPlay(localhost) 탭에서 로그인 이메일 읽기
+// SyncPlay 프론트 탭들 중 localStorage.user.email 이 실제로 있는 탭을 찾음
 async function getUserEmailFromSyncPlayTab() {
   try {
     const tabs = await chrome.tabs.query({});
 
-    const candidateTabs = tabs.filter((tab) => {
+    const syncplayTabs = tabs.filter((tab) => {
       if (!tab.url) return false;
 
-      try {
-        const u = new URL(tab.url);
-        const isLocal = u.hostname === "localhost" || u.hostname === "127.0.0.1";
-        if (!isLocal) return false;
-
-        // API 응답 탭 제외
-        if (u.pathname.startsWith("/api/")) return false;
-
-        return true;
-      } catch (e) {
-        return false;
-      }
+      return (
+        tab.url.startsWith("http://localhost:5173") ||
+        tab.url.startsWith("http://127.0.0.1:5173") ||
+        tab.url.startsWith("http://localhost:3000") ||
+        tab.url.startsWith("http://127.0.0.1:3000")
+      );
     });
 
-    for (const tab of candidateTabs) {
+    for (const tab of syncplayTabs) {
+      if (!tab.id) continue;
+
       try {
         const results = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: () => {
             try {
-              const user = JSON.parse(localStorage.getItem("user") || "null");
+              const raw = localStorage.getItem("user");
+              if (!raw) return "";
+
+              const user = JSON.parse(raw);
               return user?.email || "";
             } catch (e) {
               return "";
@@ -57,7 +51,7 @@ async function getUserEmailFromSyncPlayTab() {
         const email = results?.[0]?.result || "";
         if (email) return email;
       } catch (e) {
-        // 다음 탭 검사
+        console.error("탭 검사 실패:", tab.url, e);
       }
     }
 
@@ -73,6 +67,7 @@ async function handleExtract() {
   resultDiv.innerHTML = "영상 정보 추출 중...";
 
   try {
+    // 현재 활성 탭 가져오기
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab?.id || !tab?.url) {
@@ -80,6 +75,7 @@ async function handleExtract() {
       return;
     }
 
+    // 현재 URL 기준 플랫폼 판별
     const platform = detectPlatform(tab.url);
 
     if (!platform) {
@@ -87,6 +83,7 @@ async function handleExtract() {
       return;
     }
 
+    // 플랫폼별 bridge 파일 먼저 주입
     const bridgeFile = PLATFORM_BRIDGE_FILES[platform];
     if (bridgeFile) {
       await chrome.scripting.executeScript({
@@ -95,41 +92,30 @@ async function handleExtract() {
       });
     }
 
-    const MAX_RETRY = PLATFORMS_WITH_RETRY.includes(platform) ? 15 : 1;
-    const RETRY_INTERVAL = 300;
+    // 현재 페이지에 extractVideoInfo 함수 주입 후 결과 받기
+    const injectionResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractVideoInfo,
+    });
 
-    let injectionResults;
-    let data;
+    const data = injectionResults?.[0]?.result;
 
-    for (let i = 0; i < MAX_RETRY; i++) {
-      injectionResults = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: extractVideoInfo,
-        world: "MAIN",
-      });
-
-      data = injectionResults?.[0]?.result;
-
-      if (!data || !PLATFORMS_WITH_RETRY.includes(platform)) break;
-      if (/시즌/.test(data.subTitle || "")) break;
-      if (data.title && data.title !== "제목 인식 실패" && data.title !== "넷플릭스") break;
-
-      await new Promise((resolve) => setTimeout(resolve, RETRY_INTERVAL));
-    }
-
+    // 추출 실패 시 안내 문구 출력
     if (!data) {
       resultDiv.innerText = "데이터를 가져오지 못했습니다. 새로고침 후 다시 시도해주세요.";
       return;
     }
 
+    // SyncPlay 프론트 탭에서 로그인 이메일 읽기
     const userEmail = await getUserEmailFromSyncPlayTab();
 
     if (!userEmail) {
       resultDiv.innerText =
-        "SyncPlay 탭에서 로그인 사용자 이메일을 찾지 못했습니다. SyncPlay를 열어 로그인한 상태로 다시 시도해주세요.";
+        "SyncPlay 프론트 탭에서 로그인 사용자 이메일을 찾지 못했습니다. 프론트(localhost:5173 또는 3000)를 열고 로그인한 뒤 다시 시도해주세요.";
       return;
     }
 
+    // 서버로 보낼 payload 구성
     const payload = {
       userEmail,
       platform: data.platform,
@@ -142,12 +128,14 @@ async function handleExtract() {
       watchedAt: new Date().toISOString(),
     };
 
+    // 백엔드 서버로 시청 기록 전송
     const resp = await fetch(`${API_BASE_URL}/api/history`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
+    // 전송 성공 시 팝업에 표시
     if (resp.ok) {
       resultDiv.innerHTML = `
         <div style="color: #2563eb; font-weight: bold;">✅ 전송 성공!</div>
@@ -167,6 +155,7 @@ async function handleExtract() {
   }
 }
 
+// URL 기준 플랫폼 판별
 function detectPlatform(url) {
   try {
     const host = new URL(url).hostname;
@@ -177,8 +166,6 @@ function detectPlatform(url) {
     if (host.includes("watcha.com")) return "Watcha";
     if (host.includes("wavve.com")) return "Wavve";
     if (host.includes("tving.com")) return "TVING";
-    if (host.includes("primevideo.com") || host.includes("amazon.com")) return "PrimeVideo";
-    if (host.includes("tv.apple.com")) return "AppleTV";
 
     return null;
   } catch (e) {
@@ -196,8 +183,6 @@ function extractVideoInfo() {
   else if (host.includes("watcha.com")) platform = "Watcha";
   else if (host.includes("wavve.com")) platform = "Wavve";
   else if (host.includes("tving.com")) platform = "TVING";
-  else if (host.includes("primevideo.com") || host.includes("amazon.com")) platform = "PrimeVideo";
-  else if (host.includes("tv.apple.com")) platform = "AppleTV";
 
   const bridges = window.OTTPlatformBridges || {};
 
@@ -281,7 +266,11 @@ function extractVideoInfo() {
 
       score += area;
 
-      return { video, score, index };
+      return {
+        video,
+        score,
+        index,
+      };
     });
 
     scoredVideos.sort((a, b) => b.score - a.score);
@@ -304,12 +293,13 @@ function extractVideoInfo() {
       .replace(/\|\s*웨이브\s*$/i, "")
       .replace(/\|\s*TVING\s*$/i, "")
       .replace(/\|\s*티빙\s*$/i, "")
-      .replace(/\|\s*Prime Video\s*$/i, "")
-      .replace(/\|\s*Apple TV\s*\+?$/i, "")
       .trim();
 
     if (!value) {
-      return { title: "", subTitle: "" };
+      return {
+        title: "",
+        subTitle: "",
+      };
     }
 
     if (value.includes(":")) {
@@ -330,7 +320,10 @@ function extractVideoInfo() {
       };
     }
 
-    return { title: value, subTitle: "" };
+    return {
+      title: value,
+      subTitle: "",
+    };
   }
 
   function applyCommonSliderProgress(state) {
@@ -365,8 +358,12 @@ function extractVideoInfo() {
     mainTitle: "",
     subTitle: "",
     progress: null,
-    extractedCurrentTime: video && Number.isFinite(video.currentTime) ? Math.floor(video.currentTime) : null,
-    extractedDuration: video && Number.isFinite(video.duration) && video.duration > 0 ? Math.floor(video.duration) : null,
+    extractedCurrentTime:
+      video && Number.isFinite(video.currentTime) ? Math.floor(video.currentTime) : null,
+    extractedDuration:
+      video && Number.isFinite(video.duration) && video.duration > 0
+        ? Math.floor(video.duration)
+        : null,
   };
 
   if (
@@ -437,8 +434,10 @@ function extractVideoInfo() {
 
   if (state.progress !== null && !isNaN(parseFloat(state.progress))) {
     let numericProgress = parseFloat(state.progress);
+
     if (numericProgress < 0) numericProgress = 0;
     if (numericProgress > 100) numericProgress = 100;
+
     state.progress = numericProgress.toFixed(2);
   }
 

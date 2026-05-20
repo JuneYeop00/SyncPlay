@@ -22,3 +22,27 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+# env
+.env
+.env.*
+!.env.example
+
+# dashboard env
+syncplay-dashboard/.env
+syncplay-dashboard/.env.*
+!syncplay-dashboard/.env.example
+
+# dependencies
+node_modules/
+**/node_modules/
+
+# build outputs
+dist/
+**/dist/
+build/
+syncplay-server/build/
+
+# gradle
+.gradle/

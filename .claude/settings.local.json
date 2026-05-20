@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysqld.exe\" --console --standalone 2>&1 | Select-Object -First 20)",
+      "PowerShell(sc.exe query MySQL; sc.exe qc MySQL)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysqld.exe\" \"--defaults-file=C:\\\\ProgramData\\\\MySQL\\\\MySQL Server 8.0\\\\my.ini\" --console 2>&1 | Select-Object -First 15)",
+      "PowerShell(icacls *)",
+      "Bash(./gradlew bootRun --stacktrace)",
+      "Bash(./gradlew bootRun)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Get-Process *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(Remove-Item *)",
+      "Bash(git commit *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\WebProject1\" -Directory)",
+      "Bash(Select-Object Name)"
+    ]
+  }
+}
