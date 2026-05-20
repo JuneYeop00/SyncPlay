@@ -32,3 +32,5 @@ syncplay-server/build/
 
 # gradle
 .gradle/
+# local spring config
+syncplay-server/src/main/resources/application-local.properties
