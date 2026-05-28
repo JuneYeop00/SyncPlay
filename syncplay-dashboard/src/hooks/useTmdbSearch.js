@@ -19,6 +19,7 @@ export const useTmdbSearch = () => {
       const response = await fetch(
         `${API_BASE_URL}/api/tmdb/search?query=${encodeURIComponent(query)}&email=${encodeURIComponent(email)}&region=KR`
       );
+
       if (response.ok) {
         const data = await response.json();
         setResults(data);
