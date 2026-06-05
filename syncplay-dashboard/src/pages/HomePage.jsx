@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Play, Search, ChevronRight, Heart, Tv, Film } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SkeletonCard from '../components/SkeletonCard';
+import WatchCalendar from '../components/WatchCalendar';
 import API_BASE_URL from '../config/api';
 
 const TMDB_ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
@@ -370,6 +371,14 @@ const HomePage = ({ isDarkMode }) => {
           </div>
         </div>
       </div>
+
+      {/* ── 시청 캘린더 ── */}
+      {!loading && (
+        <WatchCalendar
+          history={recentHistory}
+          isDarkMode={isDarkMode}
+        />
+      )}
 
       {/* ── 찜 목록 ── */}
       <section className={`${glass} rounded-3xl p-8`}>
