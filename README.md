@@ -1,21 +1,25 @@
-# OTT SyncPlay Project
+# SyncPlay
 
-> 여러 OTT 플랫폼의 시청 기록을 크롬 확장 프로그램으로 수집하고, 웹 대시보드에서 통합 관리하는 배포형 서비스
+> 여러 OTT 플랫폼의 시청 기록을 크롬 확장 프로그램으로 수집하고, 웹 대시보드에서 사용자별로 통합 관리하는 배포형 서비스
 
 ## 서비스 주소
 
 - **웹 대시보드(Vercel)**: https://ott-syncplay.vercel.app
-- **백엔드 상태 확인(Render)**: https://syncplay-server-8ovd.onrender.com/api/test
+- **백엔드 API(Render)**: https://syncplay-server-8ovd.onrender.com
+- **백엔드 상태 확인**: https://syncplay-server-8ovd.onrender.com/api/test
 - **데이터베이스**: Neon PostgreSQL
+- **GitHub Repository**: `JuneYeop00/SyncPlay`
 - **크롬 확장 프로그램**: `extension` 폴더를 Chrome 개발자 모드에서 직접 로드
 
-> Render 무료 인스턴스는 일정 시간 사용하지 않으면 대기 상태로 전환될 수 있습니다. 첫 요청은 서버가 다시 시작되는 동안 다소 느릴 수 있습니다.
+기존 프론트 주소인 `https://syncplay-backup.vercel.app`은 현재 대표 주소인 `https://ott-syncplay.vercel.app`으로 리다이렉트됩니다.
+
+> Render 무료 인스턴스는 일정 시간 사용하지 않으면 대기 상태로 전환될 수 있습니다. 첫 요청은 서버가 다시 시작되는 동안 30초 이상 지연될 수 있습니다.
 
 ---
 
 ## 프로젝트 소개
 
-**OTT SyncPlay**는 Netflix, TVING, Disney+, Coupang Play, 왓챠, Wavve 등 여러 OTT 플랫폼에서 시청 중인 콘텐츠 정보를 추출하고, 사용자별 시청 기록을 하나의 대시보드에서 관리할 수 있도록 만든 프로젝트입니다.
+**SyncPlay**는 Netflix, TVING, Disney+, Coupang Play, 왓챠, Wavve 등 여러 OTT 플랫폼에서 시청 중인 콘텐츠 정보를 추출하고, 사용자별 시청 기록을 하나의 대시보드에서 관리할 수 있도록 만든 프로젝트입니다.
 
 사용자가 OTT 재생 화면에서 크롬 확장 프로그램 버튼을 누르면 다음 정보가 추출됩니다.
 
@@ -31,18 +35,18 @@
 
 ---
 
-## 배포 구조
+## 전체 배포 구조
 
 ```text
 OTT 재생 페이지
     │
     │ Chrome Extension
-    │ 제목·회차·진행률 추출
+    │ 제목·회차·진행률·사용자 정보 추출
     ▼
-Spring Boot API
+Spring Boot REST API
 Render + Docker
     │
-    │ JPA
+    │ Spring Data JPA
     ▼
 Neon PostgreSQL
     ▲
@@ -50,11 +54,12 @@ Neon PostgreSQL
     │
 React Dashboard
 Vercel
+https://ott-syncplay.vercel.app
 ```
 
 ### 서비스별 역할
 
-| 구성 | 배포 서비스 | 역할 |
+| 구성 | 서비스 | 역할 |
 |---|---|---|
 | React 대시보드 | Vercel | 로그인, 시청 기록, 검색, 찜 목록, 구독 관리 |
 | Spring Boot 서버 | Render | REST API, 사용자 및 시청 데이터 처리, TMDB 연동 |
@@ -70,18 +75,18 @@ Vercel
 
 - 회원가입 및 로그인
 - 사용자 정보 수정
-- 비밀번호 찾기 화면 제공
+- 비밀번호 찾기
 - 로그인 정보를 브라우저 `localStorage`에 저장
-- 확장 프로그램이 열려 있는 SyncPlay 대시보드 탭에서 로그인 사용자 정보를 확인
-- 서버 저장 기준은 이메일을 사용하고 팝업 화면에는 사용자 이름을 표시
+- 확장 프로그램이 열려 있는 SyncPlay 대시보드 탭에서 로그인 사용자 정보 확인
+- 서버 저장 기준은 이메일을 사용하고 확장 프로그램 팝업에는 사용자 이름 표시
 
 ### 2. 시청 기록 통합 관리
 
 - 사용자 이메일 기준 시청 기록 저장 및 조회
-- 같은 사용자의 같은 제목은 새 행을 계속 추가하지 않고 기존 기록 갱신
+- 같은 사용자의 같은 콘텐츠는 새 행을 계속 추가하지 않고 기존 기록 갱신
 - 제목, 플랫폼, 회차, 진행률, 최근 시청 시각 표시
-- 영화와 TV 시리즈를 구분해 별도 화면에서 관리
-- 시청 기록 삭제 기능
+- 영화와 TV 시리즈를 구분하여 별도 화면에서 관리
+- 시청 기록 삭제
 - 진행률 바를 통한 시청 상태 확인
 
 ### 3. 통합 콘텐츠 검색
@@ -116,6 +121,8 @@ Vercel
 - 로그인된 SyncPlay 대시보드 탭에서 사용자 정보 확인
 - Render 백엔드의 `/api/history`로 시청 기록 전송
 - 전송 성공 시 사용자 이름, 제목, 상세 정보, 진행률 표시
+- 배포 대시보드 주소 `https://ott-syncplay.vercel.app` 인식
+- 로컬 개발 주소도 함께 지원
 
 #### 지원 플랫폼
 
@@ -145,7 +152,7 @@ Vercel
 ### Backend
 
 - Java 17
-- Spring Boot 4
+- Spring Boot
 - Spring Web
 - Spring Data JPA
 - Gradle
@@ -240,7 +247,7 @@ WebProject1/
 │     ├─ main/
 │     │  ├─ java/com/syncplay/server/
 │     │  │  ├─ Application.java
-│     │  │  ├─ WebConfig.java
+│     │  │  ├─ WebConfig.java         # 로컬·Vercel·Chrome Extension CORS 설정
 │     │  │  ├─ HelloController.java
 │     │  │  ├─ UserController.java
 │     │  │  ├─ WatchHistoryController.java
@@ -271,6 +278,60 @@ WebProject1/
 ├─ .gitignore
 └─ README.md
 ```
+
+---
+
+## API 주소 관리
+
+React 페이지와 커스텀 훅은 서버 주소를 직접 작성하지 않고 `src/config/api.js`를 사용합니다.
+
+```js
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+
+export default API_BASE_URL;
+```
+
+- 로컬 실행: `http://localhost:8080`
+- Vercel 배포: `VITE_API_BASE_URL` 환경변수 사용
+- 현재 Render 주소: `https://syncplay-server-8ovd.onrender.com`
+
+---
+
+## CORS 설정
+
+Spring Boot의 `WebConfig.java`는 `/api/**` 요청에 대해 다음 출처를 허용합니다.
+
+### 로컬 React
+
+```text
+http://localhost:5173
+http://127.0.0.1:5173
+http://localhost:3000
+http://127.0.0.1:3000
+```
+
+### Vercel
+
+```text
+https://syncplay-backup.vercel.app
+https://ott-syncplay.vercel.app
+https://ott-syncplay-*.vercel.app
+```
+
+### Chrome Extension
+
+```text
+chrome-extension://*
+```
+
+허용 메서드:
+
+```text
+GET, POST, PUT, PATCH, DELETE, OPTIONS
+```
+
+기존 Vercel 도메인은 새 대표 도메인으로 리다이렉트되지만, 이전 주소를 통한 요청과 배포 미리보기 주소의 요청도 고려하여 허용 목록에 유지합니다.
 
 ---
 
@@ -342,11 +403,13 @@ Instance Type: Free
 Vercel 프로젝트 설정:
 
 ```text
+Project Name: syncplay
 Framework Preset: Vite
 Root Directory: syncplay-dashboard
 Build Command: npm run build
 Output Directory: dist
 Install Command: npm install
+Production Domain: https://ott-syncplay.vercel.app
 ```
 
 환경변수 `VITE_API_BASE_URL`, `VITE_TMDB_ACCESS_TOKEN`을 등록한 뒤 배포합니다.
@@ -356,6 +419,7 @@ Install Command: npm install
 - Neon 프로젝트 및 PostgreSQL 데이터베이스 생성
 - JDBC URL, 사용자 이름, 비밀번호를 Render 환경변수로 등록
 - Spring JPA의 `ddl-auto=update` 설정으로 엔티티 기반 테이블 생성 및 갱신
+- Vercel 도메인 또는 GitHub 저장소 이름 변경과 관계없이 기존 DB와 데이터는 유지
 
 ### 4. Extension - Chrome
 
@@ -364,7 +428,7 @@ Install Command: npm install
 2. 개발자 모드 활성화
 3. 압축해제된 확장 프로그램 로드 클릭
 4. extension 폴더 선택
-5. SyncPlay 대시보드에서 로그인
+5. https://ott-syncplay.vercel.app 에서 로그인
 6. 대시보드 탭을 열어둔 상태로 OTT 재생 페이지 접속
 7. 확장 프로그램 버튼을 눌러 시청 기록 전송
 ```
@@ -417,11 +481,37 @@ cd syncplay-server
 
 ```bash
 git add .
-git commit -m "update deployed syncplay project"
+git commit -m "update deployed SyncPlay project"
 git push origin main
 ```
 
 `main` 브랜치에 push하면 Vercel과 Render의 자동 배포 설정에 따라 새 버전이 반영됩니다.
+
+---
+
+## 배포 후 확인
+
+### Frontend
+
+```text
+https://ott-syncplay.vercel.app
+```
+
+### Backend
+
+```text
+https://syncplay-server-8ovd.onrender.com/api/test
+```
+
+### Extension
+
+```text
+1. SyncPlay 배포 사이트에서 로그인
+2. 대시보드 탭 유지
+3. OTT 재생 화면에서 확장 프로그램 실행
+4. 사용자 이름, 제목, 상세 정보, 진행률 표시 확인
+5. 대시보드에서 시청 기록 반영 확인
+```
 
 ---
 
@@ -433,15 +523,21 @@ git push origin main
 - TMDB 토큰과 DB 비밀번호는 소스코드 및 README에 실제 값으로 작성하지 않습니다.
 - 확장 프로그램은 현재 Chrome Web Store 배포가 아닌 개발자 모드 설치 방식입니다.
 - 대시보드 로그인 탭이 닫혀 있으면 확장 프로그램이 사용자 정보를 찾지 못할 수 있습니다.
+- Vercel 대표 도메인이 변경되면 `extension/popup.js`의 허용 주소도 함께 수정해야 합니다.
+- 백엔드 CORS 허용 주소가 변경되면 `WebConfig.java`를 수정한 뒤 Render를 재배포해야 합니다.
 - OTT 웹 페이지 구조가 변경되면 각 `*-bridge.js`의 선택자와 추출 로직을 수정해야 할 수 있습니다.
 
 ---
 
 ## 현재 배포 상태
 
+- GitHub Repository: `JuneYeop00/SyncPlay`
 - React 대시보드: Vercel 배포 완료
+- 대표 프론트 도메인: `https://ott-syncplay.vercel.app`
+- 기존 도메인: 새 대표 도메인으로 리다이렉트
 - Spring Boot API: Render Docker 배포 완료
 - PostgreSQL: Neon 연결 완료
-- Chrome Extension: 배포 서버와 대시보드 주소 연동 완료
-- TMDB 검색 및 포스터 연동
+- Chrome Extension: 새 배포 도메인 및 Render 서버 연동 완료
+- Spring Boot CORS: 로컬, Vercel, Chrome Extension 요청 허용
+- TMDB 검색 및 포스터 연동 완료
 - 사용자별 시청 기록·찜 목록·구독 정보 관리

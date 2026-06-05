@@ -99,7 +99,18 @@ const LoginPage = ({ isDarkMode }) => {
           >
             {loading ? '로그인 중...' : '로그인하기'}
           </button>
+          
         </form>
+        <div className="mt-6 text-center">
+          <Link
+            to="/find-password"
+            className={`${linkColor} text-sm font-bold transition-colors underline-offset-4 hover:underline`}
+          >
+            비밀번호를 잊으셨나요?
+          </Link>
+        </div>
+
+        <p className={`mt-12 text-center text-sm ${footerColor} font-bold`}></p>
 
         <p className={`mt-12 text-center text-sm ${footerColor} font-bold`}>
           처음이신가요?{' '}

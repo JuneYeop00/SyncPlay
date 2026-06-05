@@ -10,6 +10,7 @@ import SignupPage from './pages/SignupPage';
 import MyPage from './pages/MyPage';
 import SettingsPage from './pages/Settings';
 import SearchPage from './pages/SearchPage';
+import FindPasswordPage from './pages/FindPasswordPage';
 
 const App = () => {
   const location = useLocation();
@@ -34,7 +35,11 @@ const App = () => {
     localStorage.setItem('theme', newMode ? 'dark' : 'light');
   };
 
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/';
+ const isAuthPage =
+  location.pathname === '/login' ||
+  location.pathname === '/signup' ||
+  location.pathname === '/find-password' ||
+  location.pathname === '/';
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOrder, setSortOrder] = useState('newest');
   const [listCount, setListCount] = useState(0);
@@ -128,6 +133,7 @@ const App = () => {
             <Route path="/" element={<LoginPage isDarkMode={isDarkMode} />} />
             <Route path="/login" element={<LoginPage isDarkMode={isDarkMode} />} />
             <Route path="/signup" element={<SignupPage isDarkMode={isDarkMode} />} />
+            <Route path="/find-password" element={<FindPasswordPage isDarkMode={isDarkMode} />} />
             <Route path="/home" element={<HomePage isDarkMode={isDarkMode} />} />
             <Route path="/movies" element={<MoviesPage searchTerm={searchTerm} isDarkMode={isDarkMode} sortOrder={sortOrder} onCountChange={setListCount} />} />
             <Route path="/tv" element={<TvShowsPage searchTerm={searchTerm} isDarkMode={isDarkMode} sortOrder={sortOrder} onCountChange={setListCount} />} />
