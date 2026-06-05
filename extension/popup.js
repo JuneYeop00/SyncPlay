@@ -5,7 +5,7 @@ const SYNCPLAY_FRONT_URLS = [
   "http://127.0.0.1:5173",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://syncplay-backup.vercel.app",
+   "https://ott-syncplay.vercel.app",
 ];
 
 // Vercel은 기본 도메인 외에도 preview/deployment 주소가 생길 수 있어서 hostname 기준으로도 검사
@@ -20,8 +20,8 @@ function isSyncPlayFrontTabUrl(url) {
     const { hostname } = new URL(url);
 
     return (
-      hostname === "syncplay-backup.vercel.app" ||
-      (hostname.startsWith("syncplay-backup-") && hostname.endsWith(".vercel.app"))
+      hostname === "ott-syncplay.vercel.app" ||
+      (hostname.startsWith("ott-syncplay-") && hostname.endsWith(".vercel.app"))
     );
   } catch (e) {
     return false;
