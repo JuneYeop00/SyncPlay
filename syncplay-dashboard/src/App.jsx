@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { Search, Clapperboard, Tv, Settings, UserCircle, Home } from 'lucide-react';
 
 import HomePage from './pages/HomePage';
