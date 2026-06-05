@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { Search, Clapperboard, Tv, Settings, UserCircle, Home } from 'lucide-react';
 
 import HomePage from './pages/HomePage';
@@ -12,9 +11,20 @@ import SettingsPage from './pages/Settings';
 import SearchPage from './pages/SearchPage';
 import FindPasswordPage from './pages/FindPasswordPage';
 
+const ProtectedRoute = ({ children }) => {
+  const isLoggedIn =
+    localStorage.getItem('isLoggedIn') === 'true' &&
+    localStorage.getItem('user');
+
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
+
 const App = () => {
   const location = useLocation();
-  const navigate = useNavigate();
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -134,13 +144,13 @@ const App = () => {
             <Route path="/login" element={<LoginPage isDarkMode={isDarkMode} />} />
             <Route path="/signup" element={<SignupPage isDarkMode={isDarkMode} />} />
             <Route path="/find-password" element={<FindPasswordPage isDarkMode={isDarkMode} />} />
-            <Route path="/home" element={<HomePage isDarkMode={isDarkMode} />} />
-            <Route path="/movies" element={<MoviesPage searchTerm={searchTerm} isDarkMode={isDarkMode} sortOrder={sortOrder} onCountChange={setListCount} />} />
-            <Route path="/tv" element={<TvShowsPage searchTerm={searchTerm} isDarkMode={isDarkMode} sortOrder={sortOrder} onCountChange={setListCount} />} />
-            <Route path="/mypage" element={<MyPage isDarkMode={isDarkMode} />} />
-            <Route path="/settings" element={<SettingsPage isDarkMode={isDarkMode} toggleTheme={toggleTheme} />} />
-            <Route path="/search" element={<SearchPage isDarkMode={isDarkMode} />} />
-            <Route path="*" element={<Navigate to="/" />} />
+            <Route path="/home" element={<ProtectedRoute><HomePage isDarkMode={isDarkMode} /></ProtectedRoute>} />
+            <Route path="/movies" element={<ProtectedRoute><MoviesPage searchTerm={searchTerm} isDarkMode={isDarkMode} sortOrder={sortOrder} onCountChange={setListCount} /></ProtectedRoute>} />
+            <Route path="/tv" element={<ProtectedRoute><TvShowsPage searchTerm={searchTerm} isDarkMode={isDarkMode} sortOrder={sortOrder} onCountChange={setListCount} /></ProtectedRoute>} />
+            <Route path="/mypage" element={<ProtectedRoute><MyPage isDarkMode={isDarkMode} /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><SettingsPage isDarkMode={isDarkMode} toggleTheme={toggleTheme} /></ProtectedRoute>} />
+            <Route path="/search" element={<ProtectedRoute><SearchPage isDarkMode={isDarkMode} /></ProtectedRoute>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
 
