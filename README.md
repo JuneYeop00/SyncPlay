@@ -4,7 +4,7 @@
 
 ## 서비스 주소
 
-- **웹 대시보드(Vercel)**: https://syncplay-backup.vercel.app
+- **웹 대시보드(Vercel)**: https://ott-syncplay.vercel.app
 - **백엔드 상태 확인(Render)**: https://syncplay-server-8ovd.onrender.com/api/test
 - **데이터베이스**: Neon PostgreSQL
 - **크롬 확장 프로그램**: `extension` 폴더를 Chrome 개발자 모드에서 직접 로드
