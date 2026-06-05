@@ -191,7 +191,6 @@ public class UserController {
         }
 
         User user = optionalUser.get();
-        String originalPassword = user.getPassword();
 
         String temporaryPassword =
                 "SP" + UUID.randomUUID()
@@ -200,13 +199,14 @@ public class UserController {
                         .substring(0, 8);
 
         try {
-            user.setPassword(temporaryPassword);
-            userRepository.save(user);
-
+            // 메일이 성공한 뒤에만 DB 비밀번호 변경
             passwordMailService.sendTemporaryPassword(
                     email,
                     temporaryPassword
             );
+
+            user.setPassword(temporaryPassword);
+            userRepository.saveAndFlush(user);
 
             return ResponseEntity.ok(
                     Map.of(
@@ -214,11 +214,15 @@ public class UserController {
                             "임시 비밀번호가 이메일로 전송되었습니다."
                     )
             );
-        } catch (Exception e) {
-            e.printStackTrace();
 
-            user.setPassword(originalPassword);
-            userRepository.save(user);
+        } catch (Exception e) {
+            System.err.println(
+                    "메일 전송 실패 유형: " + e.getClass().getName()
+            );
+            System.err.println(
+                    "메일 전송 실패 메시지: " + e.getMessage()
+            );
+            e.printStackTrace();
 
             return ResponseEntity.internalServerError()
                     .body(Map.of(
@@ -226,7 +230,6 @@ public class UserController {
                             "메일 전송에 실패했습니다. 잠시 후 다시 시도해주세요."
                     ));
         }
-    }
 
     private Map<String, Object> toSafeUser(User user) {
         Map<String, Object> safeUser = new LinkedHashMap<>();

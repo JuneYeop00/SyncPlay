@@ -1,5 +1,6 @@
 package com.syncplay.server;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
@@ -8,14 +9,23 @@ import org.springframework.stereotype.Service;
 public class PasswordMailService {
 
     private final JavaMailSender javaMailSender;
+    private final String senderEmail;
 
-    public PasswordMailService(JavaMailSender javaMailSender) {
+    public PasswordMailService(
+            JavaMailSender javaMailSender,
+            @Value("${spring.mail.username}") String senderEmail
+    ) {
         this.javaMailSender = javaMailSender;
+        this.senderEmail = senderEmail;
     }
 
-    public void sendTemporaryPassword(String email, String temporaryPassword) {
+    public void sendTemporaryPassword(
+            String email,
+            String temporaryPassword
+    ) {
         SimpleMailMessage message = new SimpleMailMessage();
 
+        message.setFrom(senderEmail);
         message.setTo(email);
         message.setSubject("[SyncPlay] 임시 비밀번호 안내");
         message.setText(
