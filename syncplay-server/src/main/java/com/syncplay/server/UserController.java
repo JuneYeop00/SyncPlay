@@ -215,6 +215,8 @@ public class UserController {
                     )
             );
         } catch (Exception e) {
+            e.printStackTrace();
+
             user.setPassword(originalPassword);
             userRepository.save(user);
 
