@@ -55,65 +55,145 @@ const Settings = ({ isDarkMode, toggleTheme }) => {
     setShowConfirmPw(false);
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const user = JSON.parse(localStorage.getItem('user'));
-    if (!user) { setVerifyError('로그인 정보를 찾을 수 없습니다.'); return; }
-    if (user.password !== currentPassword) { setVerifyError('비밀번호가 일치하지 않습니다.'); return; }
-    setEditName(user.name || '');
-    setEditEmail(user.email || '');
-    setNewPassword('');
-    setConfirmNewPassword('');
-    setSaveError('');
-    setSaveSuccess(false);
-    setModalStep('edit');
-  };
 
-  const handleSave = async () => {
-    if (!editName.trim()) { setSaveError('이름을 입력해주세요.'); return; }
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(editEmail)) { setSaveError('올바른 이메일 형식이 아닙니다.'); return; }
-
-    const currentUser = JSON.parse(localStorage.getItem('user'));
-
-    if (newPassword) {
-      if (newPassword === currentUser.password) {
-        setSaveError('이미 사용중인 비밀번호로는 변경할 수 없습니다.');
-        return;
-      }
-      if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{10,}/.test(newPassword)) {
-        setSaveError('비밀번호는 대소문자, 숫자, 특수문자 포함 10자 이상이어야 합니다.');
-        return;
-      }
-      if (newPassword !== confirmNewPassword) { setSaveError('새 비밀번호가 일치하지 않습니다.'); return; }
+    if (!user) {
+      setVerifyError('로그인 정보를 찾을 수 없습니다.');
+      return;
     }
 
+    if (!currentPassword.trim()) {
+      setVerifyError('현재 비밀번호를 입력해주세요.');
+      return;
+    }
+
+    setVerifyError('');
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users/update`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`${API_BASE_URL}/api/users/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          currentEmail: currentUser.email,
-          name: editName.trim(),
-          newEmail: editEmail.trim().toLowerCase(),
-          newPassword: newPassword || null,
+          email: user.email,
+          password: currentPassword,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) { setSaveError(data?.message || '저장에 실패했습니다.'); return; }
+
+      if (!res.ok) {
+        setVerifyError(
+          data?.message || '비밀번호가 일치하지 않습니다.'
+        );
+        return;
+      }
+
+      setEditName(data.user.name || '');
+      setEditEmail(data.user.email || '');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setSaveError('');
+      setSaveSuccess(false);
+      setModalStep('edit');
+    } catch (error) {
+      console.error('비밀번호 인증 오류:', error);
+      setVerifyError('서버 연결에 실패했습니다.');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editName.trim()) {
+      setSaveError('이름을 입력해주세요.');
+      return;
+    }
+
+    const emailRegex =
+      /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+    if (!emailRegex.test(editEmail)) {
+      setSaveError('올바른 이메일 형식이 아닙니다.');
+      return;
+    }
+
+    const currentUser = JSON.parse(
+      localStorage.getItem('user')
+    );
+
+    if (!currentUser) {
+      setSaveError('로그인 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    if (newPassword) {
+      if (newPassword === currentPassword) {
+        setSaveError(
+          '현재 사용 중인 비밀번호로는 변경할 수 없습니다.'
+        );
+        return;
+      }
+
+      if (
+        !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{10,}/.test(
+          newPassword
+        )
+      ) {
+        setSaveError(
+          '비밀번호는 대소문자, 숫자, 특수문자 포함 10자 이상이어야 합니다.'
+        );
+        return;
+      }
+
+      if (newPassword !== confirmNewPassword) {
+        setSaveError('새 비밀번호가 일치하지 않습니다.');
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/users/update`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            currentEmail: currentUser.email,
+            name: editName.trim(),
+            newEmail: editEmail.trim().toLowerCase(),
+            newPassword: newPassword || null,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSaveError(
+          data?.message || '저장에 실패했습니다.'
+        );
+        return;
+      }
 
       const updatedUser = {
         ...currentUser,
         name: data.user.name,
         email: data.user.email,
-        password: data.password,
       };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+
+      localStorage.setItem(
+        'user',
+        JSON.stringify(updatedUser)
+      );
 
       setSaveSuccess(true);
       setSaveError('');
       setTimeout(closeModal, 1500);
-    } catch {
+    } catch (error) {
+      console.error('회원정보 변경 오류:', error);
       setSaveError('서버 연결에 실패했습니다.');
     }
   };
