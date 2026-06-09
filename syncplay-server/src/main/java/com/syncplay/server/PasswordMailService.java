@@ -1,54 +1,104 @@
 package com.syncplay.server;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 
-import java.util.List;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Map;
 
 @Service
 public class PasswordMailService {
 
-    private final WebClient webClient;
-    private final String apiKey;
+```
+private final HttpClient httpClient;
+private final ObjectMapper objectMapper;
+private final String scriptUrl;
+private final String scriptSecret;
 
-    public PasswordMailService(
-            @Value("${resend.api-key}") String apiKey
-    ) {
-        this.webClient = WebClient.builder()
-                .baseUrl("https://api.resend.com")
-                .build();
+public PasswordMailService(
+        @Value("${mail.script.url}") String scriptUrl,
+        @Value("${mail.script.secret}") String scriptSecret
+) {
+    this.scriptUrl = scriptUrl;
+    this.scriptSecret = scriptSecret;
+    this.objectMapper = new ObjectMapper();
 
-        this.apiKey = apiKey;
-    }
+    this.httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(15))
+            .followRedirects(HttpClient.Redirect.ALWAYS)
+            .build();
+}
 
-    public void sendTemporaryPassword(
-            String email,
-            String temporaryPassword
-    ) {
-        Map<String, Object> requestBody = Map.of(
-                "from", "SyncPlay <onboarding@resend.dev>",
-                "to", List.of(email),
-                "subject", "[SyncPlay] 임시 비밀번호 안내",
-                "text",
-                "SyncPlay 임시 비밀번호가 발급되었습니다.\n\n" +
-                        "임시 비밀번호: " + temporaryPassword + "\n\n" +
-                        "로그인 후 설정 화면에서 비밀번호를 변경해주세요."
+public void sendTemporaryPassword(
+        String email,
+        String temporaryPassword
+) {
+    try {
+        String requestBody = objectMapper.writeValueAsString(
+                Map.of(
+                        "secret", scriptSecret,
+                        "email", email,
+                        "temporaryPassword", temporaryPassword
+                )
         );
 
-        webClient.post()
-                .uri("/emails")
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(scriptUrl))
+                .timeout(Duration.ofSeconds(30))
                 .header(
-                        HttpHeaders.AUTHORIZATION,
-                        "Bearer " + apiKey
+                        "Content-Type",
+                        "application/json; charset=UTF-8"
                 )
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestBody)
-                .retrieve()
-                .toBodilessEntity()
-                .block();
+                .POST(
+                        HttpRequest.BodyPublishers.ofString(
+                                requestBody
+                        )
+                )
+                .build();
+
+        HttpResponse<String> response =
+                httpClient.send(
+                        request,
+                        HttpResponse.BodyHandlers.ofString()
+                );
+
+        if (response.statusCode() < 200
+                || response.statusCode() >= 300) {
+            throw new RuntimeException(
+                    "Apps Script 응답 오류: "
+                            + response.statusCode()
+            );
+        }
+
+        JsonNode result =
+                objectMapper.readTree(response.body());
+
+        if (!result.path("success").asBoolean(false)) {
+            throw new RuntimeException(
+                    result.path("message")
+                            .asText("메일 전송에 실패했습니다.")
+            );
+        }
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+
+        throw new RuntimeException(
+                "메일 전송이 중단되었습니다.",
+                e
+        );
+    } catch (Exception e) {
+        throw new RuntimeException(
+                "메일 전송에 실패했습니다.",
+                e
+        );
     }
+}
+```
+
 }
