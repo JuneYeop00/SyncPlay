@@ -16,10 +16,9 @@ public class PasswordMailService {
     private final String apiKey;
 
     public PasswordMailService(
-            WebClient.Builder webClientBuilder,
             @Value("${resend.api-key}") String apiKey
     ) {
-        this.webClient = webClientBuilder
+        this.webClient = WebClient.builder()
                 .baseUrl("https://api.resend.com")
                 .build();
 
